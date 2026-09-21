@@ -1,0 +1,28 @@
+<!-- src/main/resources/META-INF/plugin.xml -->
+
+<idea-plugin>
+    <id>com.example.plugin-test</id>
+
+    <name>Code Visualizer</name>
+
+    <vendor>Plugin Test</vendor>
+
+    <description><![CDATA[
+        Visualize how your application works directly inside IntelliJ IDEA.
+    ]]></description>
+
+    <depends>com.intellij.modules.platform</depends>
+
+    <resource-bundle>messages.MyMessageBundle</resource-bundle>
+
+    <extensions defaultExtensionNs="com.intellij">
+
+        <toolWindow
+                id="Code Visualizer"
+                anchor="right"
+                factoryClass="com.example.MyToolWindowFactory"
+                icon="AllIcons.Toolwindows.ToolWindowPalette"/>
+
+    </extensions>
+
+</idea-plugin>
