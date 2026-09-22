@@ -1379,3 +1379,15 @@
 .zone-method--put,
 .zone-method--patch { color: var(--project); }
 .zone-method--delete { color: var(--unmatched); }
+
+/* A zone with nothing in it says why. An empty box reads as a broken tool; a sentence
+   reads as an answer, and "this project has no HTTP layer" is a real answer about a
+   real project rather than a failure of the analysis. */
+.zone-list__empty {
+  display: block;
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-muted, #79859a);
+  font-style: italic;
+}

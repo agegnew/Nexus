@@ -42,9 +42,24 @@ function clientFeatures(analysis) {
     files.set(path, entry)
   })
 
-  return [...files.values()]
+  const named = [...files.values()]
     .map((file) => ({ path: file.path, label: humanName(file.name), ...describeFeature(file.verbs, file.resources) }))
+
+  // Two files called index.ts in different folders are two features, and rendering both as
+  // "Index" makes the layer look like it is repeating itself. The folder is what tells them
+  // apart on disk, so it is what tells them apart here.
+  const byLabel = new Map()
+  named.forEach((f) => byLabel.set(f.label, (byLabel.get(f.label) ?? 0) + 1))
+  return named
+    .map((f) => (byLabel.get(f.label) > 1
+      ? { ...f, label: `${humanName(folderOf(f.path))} ${f.label}`.trim() }
+      : f))
     .sort((left, right) => left.label.localeCompare(right.label))
+}
+
+function folderOf(path) {
+  const parts = String(path).split('/').filter(Boolean)
+  return parts.length > 1 ? parts.at(-2) : ''
 }
 
 function interfaceRoutes(analysis) {
@@ -56,18 +71,28 @@ function interfaceRoutes(analysis) {
     }
   })
 
-  return analysis.nodes
+  // One row per route, not one row per declaration of it. A repository that holds a build
+  // directory, a worktree or a second copy of its API declares the same route several
+  // times, and the layer was listing it once per copy: nine rows covering three routes,
+  // under a header counting twenty-one.
+  const seen = new Map()
+  analysis.nodes
     .filter((node) => node.kind === 'endpoint')
-    .map((node) => {
+    .forEach((node) => {
       const [method, ...rest] = node.label.split(' ')
+      const path = rest.join(' ') || node.label
+      const key = `${method} ${path}`
+      if (seen.has(key)) return
       const handler = handlerFor.get(node.id)
-      return {
+      seen.set(key, {
         id: node.id,
         method,
-        path: rest.join(' ') || node.label,
+        path,
         handler: handler ? `${handler.label}${handler.line ? ` at line ${handler.line}` : ''}` : node.label,
-      }
+      })
     })
+
+  return [...seen.values()]
     .sort((left, right) => left.path.localeCompare(right.path) || left.method.localeCompare(right.method))
 }
 
@@ -165,9 +190,18 @@ export default function ArchitectureDiagram({ analysis }) {
             <section className="architecture-zone architecture-zone--client" aria-label="Client layer">
               <header>
                 <span>01</span>
-                <div><strong>Client layer</strong><small>{plural(summary.frontendCalls, 'API call')}</small></div>
+                {/* Counts what the list below actually shows. It counted calls while the
+                    body listed files, so a project with two API modules and two hundred
+                    calls had a header and a body disagreeing by two orders of magnitude. */}
+                <div>
+                  <strong>Client layer</strong>
+                  <small>{plural(summary.features.length, 'feature')} · {plural(summary.frontendCalls, 'call')}</small>
+                </div>
               </header>
               <ul className="zone-list">
+                {features.shown.length === 0 && (
+                  <li className="zone-list__empty">No HTTP calls found in this project's source</li>
+                )}
                 {features.shown.map((feature) => (
                   <li key={feature.path} title={feature.path}>
                     <Glyph name={feature.glyph} className="zone-list__icon" />
@@ -184,9 +218,14 @@ export default function ArchitectureDiagram({ analysis }) {
             <section className="architecture-zone architecture-zone--interface" aria-label="Interface layer">
               <header>
                 <span>02</span>
-                <div><strong>Interface layer</strong><small>{plural(summary.endpoints, 'route')}</small></div>
+                <div><strong>Interface layer</strong><small>{plural(summary.routes.length, 'route')}</small></div>
               </header>
               <ul className="zone-list zone-list--routes">
+                {/* An empty box is read as a broken tool. A project with no HTTP layer is a
+                    normal project, and saying so is the difference between the two. */}
+                {routes.shown.length === 0 && (
+                  <li className="zone-list__empty">No routes found. Spring, FastAPI, Express and Next.js are recognised</li>
+                )}
                 {routes.shown.map((route) => (
                   <li key={route.id} title={route.handler}>
                     <b className={`zone-method zone-method--${route.method.toLowerCase()}`}>{route.method}</b>
@@ -202,6 +241,11 @@ export default function ArchitectureDiagram({ analysis }) {
                 <span>03</span>
                 <div><strong>Service layer</strong><small>{plural(summary.backendFiles, 'source module')}</small></div>
               </header>
+              {summary.services.length === 0 && (
+                <ul className="zone-list">
+                  <li className="zone-list__empty">No server framework detected in this project</li>
+                </ul>
+              )}
             </section>
 
             <div className="architecture-service-list">
