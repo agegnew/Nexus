@@ -28,6 +28,8 @@ class TrustService(private val project: Project) {
 
     private val coverage = CoverageReportSource()
 
+    private val references = ReferenceScanner(project)
+
     /**
      * Real coverage first, the fixture only when there is none.
      *
@@ -40,6 +42,10 @@ class TrustService(private val project: Project) {
 
     @Volatile
     private var explicit: Boolean? = null
+
+    /** Cleared by [refresh], so a finished run re-asks both questions and not just one. */
+    @Volatile
+    private var enriched: Map<String, FileTrust>? = null
 
     /**
      * Off unless the project asked otherwise, and then whatever the user last chose.
@@ -69,8 +75,28 @@ class TrustService(private val project: Project) {
     /** Null when nothing is known about the file, which the UI shows differently from "all proven". */
     fun trustFor(file: VirtualFile): FileTrust? = source.trustFor(project, file)
 
-    /** Every file the current source has an opinion about. */
+    /** Every file the current source has an opinion about. Cheap: no index lookups. */
     fun allKnown(): Map<String, FileTrust> = source.all(project)
+
+    /**
+     * The same verdict with dead code marked, which costs index lookups.
+     *
+     * **Call this off the event thread.** It searches the project for every file that never ran
+     * at all, and doing that on the UI thread would freeze the IDE for as long as it takes.
+     * The painter deliberately uses [allKnown] instead: whether a line ran is all it needs, and
+     * whether anything imports the file has no bearing on what colour to wash it.
+     */
+    fun allKnownDetailed(): Map<String, FileTrust> {
+        enriched?.let { return it }
+
+        val raw = allKnown()
+        val marks = references.classify(raw.values)
+        val result = raw.mapValues { (path, trust) ->
+            marks[path]?.let { trust.copy(reachability = it) } ?: trust
+        }
+        enriched = result
+        return result
+    }
 
     /**
      * Re-reads the report and tells everyone. Called when a run finishes, which is the moment
@@ -78,6 +104,8 @@ class TrustService(private val project: Project) {
      */
     fun refresh() {
         coverage.invalidate()
+        references.invalidate()
+        enriched = null
         if (!project.isDisposed) {
             project.messageBus.syncPublisher(TrustListener.TOPIC).trustChanged()
         }

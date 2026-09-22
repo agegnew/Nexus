@@ -20,6 +20,26 @@ enum class TrustLevel {
 }
 
 /**
+ * Whether anything else in the project mentions this file.
+ *
+ * Static analysis alone cannot tell you a thing is unused: one caller is enough to make an
+ * inspection call it "used", even when that caller is itself dead. Runtime alone cannot tell
+ * you why nothing ran: an untested path and an orphan look identical in a coverage report.
+ * Putting the two together is the only way to say "delete this" and mean it.
+ */
+enum class Reachability {
+
+    /** Some other file names this one, so it is wired in even if no run reached it. */
+    REFERENCED,
+
+    /** Nothing anywhere names it. Combined with never having run, that is dead code. */
+    UNREFERENCED,
+
+    /** Not looked up yet, or the indexes were not ready. Never treated as dead. */
+    UNKNOWN,
+}
+
+/**
  * A closed range of **1-based** line numbers, the way an editor shows them.
  *
  * Inclusive on both ends because every source of this data (coverage reports, git diffs,
@@ -70,6 +90,11 @@ data class FileTrust(
      * "this answer is older than the code", not "every line here is suspect".
      */
     val changedSinceRun: Boolean = false,
+    /**
+     * Filled in separately from the coverage read, because it costs an index lookup and only
+     * matters for the handful of files that never ran at all.
+     */
+    val reachability: Reachability = Reachability.UNKNOWN,
 ) {
 
     val unprovenLines: Int get() = unproven.sumOf { it.lineCount }
@@ -78,6 +103,26 @@ data class FileTrust(
 
     /** Nothing to paint, so the painter can skip the file without building any highlighters. */
     val isClean: Boolean get() = unproven.isEmpty() && stale.isEmpty()
+
+    val fileName: String get() = path.substringAfterLast('/')
+
+    /** "" for a file at the project root, which groups under [TrustLayers.ROOT]. */
+    val folder: String get() = path.substringBeforeLast('/', "")
+
+    /**
+     * Nothing ever ran it and nothing anywhere refers to it.
+     *
+     * Both halves are required. A file that never ran but is imported somewhere is untested,
+     * which is a reason to write a test. Only when neither the runtime nor the rest of the
+     * codebase has any use for it is deleting it the honest advice.
+     */
+    val isDead: Boolean
+        get() = totalLines > 0 &&
+            unprovenLines == totalLines &&
+            reachability == Reachability.UNREFERENCED
+
+    /** Wired in, but no run has ever reached it. The case that wants a test written. */
+    val isUnproven: Boolean get() = unprovenLines > 0 && !isDead
 
     /** Whole percent of the file that has never run, for the status bar. */
     fun percentUnproven(): Int =
@@ -91,5 +136,85 @@ data class FileTrust(
 
     companion object {
         fun clean(path: String, totalLines: Int) = FileTrust(path, emptyList(), emptyList(), totalLines)
+    }
+}
+
+/**
+ * One folder's worth of files, rolled up.
+ *
+ * This is the unit that turns a list into a finding. "34 files have unproven lines" is a
+ * chore; "every agent and every tool in this project has never executed" is a sentence
+ * somebody repeats afterwards, and it is the same data.
+ */
+data class LayerSummary(
+    /** What to show: the folder with the part every folder shares stripped off the front. */
+    val name: String,
+    /** The full project-relative folder, kept for navigation and tooltips. */
+    val folder: String,
+    val files: List<FileTrust>,
+) {
+
+    val totalLines: Int get() = files.sumOf { it.totalLines }
+
+    val unprovenLines: Int get() = files.sumOf { it.unprovenLines }
+
+    val deadFiles: Int get() = files.count { it.isDead }
+
+    fun percentUnproven(): Int =
+        if (totalLines <= 0) 0 else (unprovenLines * 100) / totalLines
+}
+
+/**
+ * Groups files by the folder they sit in, then throws away the prefix they all share.
+ *
+ * Grouping by the immediate parent rather than by a list of known layer names is what makes
+ * this work on a codebase nobody has seen: `app/services` and `src/main/java/.../service`
+ * both reduce to something a human recognises, with no configuration and no language check.
+ */
+object TrustLayers {
+
+    const val ROOT = "(root)"
+
+    fun of(files: Collection<FileTrust>): List<LayerSummary> {
+        if (files.isEmpty()) return emptyList()
+
+        val byFolder = files.groupBy { it.folder }
+        val prefix = commonPrefix(byFolder.keys)
+
+        return byFolder.map { (folder, group) ->
+            LayerSummary(name = display(folder, prefix), folder = folder, files = group)
+        }.sortedByDescending { it.unprovenLines }
+    }
+
+    /**
+     * The longest run of leading path segments every folder shares.
+     *
+     * Stripping it is what turns `backend/app/services` and `backend/app/agents` into
+     * `services` and `agents`. Without it every label starts with the same nine characters
+     * and the eye has to skip past them on every row.
+     */
+    internal fun commonPrefix(folders: Collection<String>): List<String> {
+        val split = folders.filter { it.isNotEmpty() }.map { it.split('/') }
+        if (split.size < 2) return emptyList()
+
+        var shared = split.first()
+        for (parts in split.drop(1)) {
+            val take = shared.zip(parts).takeWhile { (a, b) -> a == b }.size
+            shared = shared.take(take)
+            if (shared.isEmpty()) break
+        }
+        // Never strip everything: a folder reduced to nothing has no label left to show.
+        return if (shared.size >= split.minOf { it.size }) shared.dropLast(1) else shared
+    }
+
+    private fun display(folder: String, prefix: List<String>): String {
+        if (folder.isEmpty()) return ROOT
+        val parts = folder.split('/')
+        val trimmed = if (parts.size > prefix.size && parts.take(prefix.size) == prefix) {
+            parts.drop(prefix.size)
+        } else {
+            parts
+        }
+        return trimmed.joinToString("/").ifEmpty { folder.substringAfterLast('/') }
     }
 }

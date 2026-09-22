@@ -69,4 +69,45 @@ class TrustModelTest {
         assertTrue(FileTrust("app/clean.py", totalLines = 10).isClean)
         assertFalse(FileTrust("app/dirty.py", unproven = listOf(LineRange(1, 1))).isClean)
     }
+
+    @Test
+    fun `dead needs both halves, never run and nothing pointing at it`() {
+        val whole = listOf(LineRange(1, 40))
+
+        val orphan = FileTrust("app/gone.py", whole, totalLines = 40, reachability = Reachability.UNREFERENCED)
+        val untested = FileTrust("app/new.py", whole, totalLines = 40, reachability = Reachability.REFERENCED)
+
+        assertTrue(orphan.isDead)
+        assertFalse(untested.isDead)
+        // Untested is the case that wants a test written, so it must not be filed as deletable.
+        assertTrue(untested.isUnproven)
+        assertFalse(orphan.isUnproven)
+    }
+
+    @Test
+    fun `an unanswered lookup never counts as dead`() {
+        // Dumb mode and a failed search both land here, and either one telling somebody to
+        // delete working code would be the single worst thing this feature could do.
+        val unknown = FileTrust(
+            "app/maybe.py",
+            listOf(LineRange(1, 12)),
+            totalLines = 12,
+            reachability = Reachability.UNKNOWN,
+        )
+
+        assertFalse(unknown.isDead)
+        assertTrue(unknown.isUnproven)
+    }
+
+    @Test
+    fun `a file that ran even once is not dead, whoever references it`() {
+        val partly = FileTrust(
+            "app/half.py",
+            listOf(LineRange(1, 5)),
+            totalLines = 20,
+            reachability = Reachability.UNREFERENCED,
+        )
+
+        assertFalse(partly.isDead)
+    }
 }
