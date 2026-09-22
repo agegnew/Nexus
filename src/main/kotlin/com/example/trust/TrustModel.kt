@@ -175,13 +175,22 @@ object TrustLayers {
 
     const val ROOT = "(root)"
 
-    fun of(files: Collection<FileTrust>): List<LayerSummary> {
+    /**
+     * [namingBasis] is the set the shared prefix is measured on, and it should always be
+     * everything known, whatever subset is being drawn. Measured on the subset instead, a
+     * filter down to two files in `app/tools` and `app/models` would find `app` shared and
+     * strip it, and the same folder would be called `app/tools` in one view and `tools` in
+     * the next. Names that move when you filter are names nobody trusts.
+     */
+    fun of(
+        files: Collection<FileTrust>,
+        namingBasis: Collection<FileTrust> = files,
+    ): List<LayerSummary> {
         if (files.isEmpty()) return emptyList()
 
-        val byFolder = files.groupBy { it.folder }
-        val prefix = commonPrefix(byFolder.keys)
+        val prefix = commonPrefix(namingBasis.map { it.folder }.toSet())
 
-        return byFolder.map { (folder, group) ->
+        return files.groupBy { it.folder }.map { (folder, group) ->
             LayerSummary(name = display(folder, prefix), folder = folder, files = group)
         }.sortedByDescending { it.unprovenLines }
     }
@@ -199,22 +208,22 @@ object TrustLayers {
 
         var shared = split.first()
         for (parts in split.drop(1)) {
-            val take = shared.zip(parts).takeWhile { (a, b) -> a == b }.size
-            shared = shared.take(take)
+            shared = shared.zip(parts).takeWhile { (a, b) -> a == b }.map { it.first }
             if (shared.isEmpty()) break
         }
-        // Never strip everything: a folder reduced to nothing has no label left to show.
-        return if (shared.size >= split.minOf { it.size }) shared.dropLast(1) else shared
+        return shared
     }
 
     private fun display(folder: String, prefix: List<String>): String {
         if (folder.isEmpty()) return ROOT
         val parts = folder.split('/')
-        val trimmed = if (parts.size > prefix.size && parts.take(prefix.size) == prefix) {
+        val stripped = if (parts.size >= prefix.size && parts.take(prefix.size) == prefix) {
             parts.drop(prefix.size)
         } else {
             parts
         }
-        return trimmed.joinToString("/").ifEmpty { folder.substringAfterLast('/') }
+        // The folder that *is* the prefix keeps its own last name: files sitting directly in
+        // `app` are labelled `app`, not left with nothing.
+        return stripped.joinToString("/").ifEmpty { parts.last() }
     }
 }

@@ -46,14 +46,35 @@ class TrustLayersTest {
     }
 
     @Test
-    fun `a prefix is never stripped so hard that a folder loses its name`() {
-        // "app" is shared, but it is also a folder in its own right, so stripping it would
-        // leave the first file with an empty label.
+    fun `the folder that is itself the prefix keeps its own name`() {
+        // "app" is shared by both, so it is stripped from "app/sub"; but a file sitting
+        // directly in "app" must not be left with an empty label.
         val layers = TrustLayers.of(
             listOf(file("app/main.py", 1, 10), file("app/sub/other.py", 2, 10)),
         )
 
-        assertEquals(setOf("app", "app/sub"), layers.map { it.name }.toSet())
+        assertEquals(setOf("app", "sub"), layers.map { it.name }.toSet())
+    }
+
+    @Test
+    fun `names do not move when the set is filtered`() {
+        val everything = listOf(
+            file("app/main.py", 1, 10),
+            file("app/tools/nmap.py", 63, 63),
+            file("app/models/chain.py", 13, 13),
+            file("app/api/v1/auth.py", 5, 100),
+        )
+        val dead = everything.filter { it.folder == "app/tools" || it.folder == "app/models" }
+
+        val full = TrustLayers.of(everything).associate { it.folder to it.name }
+        val filtered = TrustLayers.of(dead, namingBasis = everything).associate { it.folder to it.name }
+
+        // Measured on the subset alone, "app" would be stripped and these would become
+        // "tools" and "models" while the full view still said "app/tools". Same basis,
+        // same names.
+        assertEquals(full.getValue("app/tools"), filtered.getValue("app/tools"))
+        assertEquals(full.getValue("app/models"), filtered.getValue("app/models"))
+        assertEquals("tools", filtered.getValue("app/tools"))
     }
 
     @Test

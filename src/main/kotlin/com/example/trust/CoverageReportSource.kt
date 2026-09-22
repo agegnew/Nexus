@@ -116,6 +116,10 @@ class CoverageReportSource : ExecutionSource {
         val root = runCatching { projectRoot.canonicalFile }.getOrDefault(projectRoot)
 
         return hits.mapNotNull { (reported, lines) ->
+            // A file with no executable lines has no verdict to give. Reports list every
+            // __init__.py and every empty module, and counting them inflates "N files"
+            // with entries that could neither pass nor fail anything.
+            if (lines.isEmpty()) return@mapNotNull null
             val resolved = resolve(reported, report, root) ?: return@mapNotNull null
             val relative = resolved.path.removePrefix(root.path).trimStart('/')
 

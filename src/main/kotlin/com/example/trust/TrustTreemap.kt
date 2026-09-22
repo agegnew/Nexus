@@ -7,6 +7,8 @@ import java.awt.BasicStroke
 import java.awt.Color
 import java.awt.Cursor
 import java.awt.Dimension
+import java.awt.Font
+import java.awt.FontMetrics
 import java.awt.Graphics
 import java.awt.Graphics2D
 import java.awt.Rectangle
@@ -14,6 +16,7 @@ import java.awt.RenderingHints
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
 import javax.swing.JComponent
+import javax.swing.SwingUtilities
 import javax.swing.Timer
 import javax.swing.ToolTipManager
 import kotlin.math.max
@@ -40,9 +43,27 @@ class TrustTreemap : JComponent() {
     /** Single click filters the list below to that folder. */
     var onLayerSelected: ((LayerSummary?) -> Unit)? = null
 
+    /**
+     * Folders whose box came out too small to see, after each layout.
+     *
+     * Area is proportional and stays that way: a five line folder in a two thousand line
+     * project is a sliver, and inflating it would make the picture lie about size. What the
+     * picture cannot show, the caption says instead, so the bars and the boxes never disagree.
+     */
+    var onUndrawn: ((List<LayerSummary>) -> Unit)? = null
+
     var selectedLayer: String? = null
         set(value) {
             field = value
+            repaint()
+        }
+
+    /** Folder boxes with headers, or every file in one flat field. */
+    var grouped: Boolean = true
+        set(value) {
+            if (field == value) return
+            field = value
+            laidOutFor = Dimension(0, 0)
             repaint()
         }
 
@@ -109,7 +130,9 @@ class TrustTreemap : JComponent() {
      * which is exactly the claim being made: the same code, newly proven.
      */
     fun setData(next: List<LayerSummary>, animate: Boolean) {
-        val targets = next.flatMap { it.files }.associate { it.path to it.unprovenLines.toDouble() }
+        val files = next.flatMap { it.files }
+        val targets = files.associate { it.path to it.unprovenLines.toDouble() }
+        val sizes = files.associate { it.path to it.totalLines }
 
         layers = next
         laidOutFor = Dimension(0, 0)
@@ -125,9 +148,7 @@ class TrustTreemap : JComponent() {
 
         val from = targets.keys.associateWith { displayed[it] ?: targets.getValue(it) }
         // Small files first, so the colour sweeps across the picture instead of switching.
-        val order = targets.keys.sortedBy { path ->
-            next.flatMap { it.files }.firstOrNull { it.path == path }?.totalLines ?: 0
-        }
+        val order = targets.keys.sortedBy { sizes[it] ?: 0 }
         val slot = order.withIndex().associate { (i, path) ->
             path to (i.toDouble() / max(order.size, 1)) * STAGGER
         }
@@ -159,25 +180,43 @@ class TrustTreemap : JComponent() {
             else -> "never run"
         }
         return "<html><b>${file.path}</b><br>" +
-            "${file.unprovenLines} of ${file.totalLines} lines ${verdict}</html>"
+            "${file.unprovenLines} of ${file.totalLines} lines $verdict</html>"
     }
 
     private fun cellAt(x: Int, y: Int): Cell? = cells.lastOrNull { it.bounds.contains(x, y) }
 
     private fun relayout() {
         val bounds = TreemapRect(0.0, 0.0, width.toDouble(), height.toDouble())
-        groups = Squarify.layout(layers, { it.totalLines.toDouble() }, bounds)
 
-        cells = groups.flatMap { group ->
-            // Room for the folder name across the top of its box.
-            val inner = TreemapRect(
-                group.rect.x + 1, group.rect.y + HEADER, group.rect.w - 2,
-                (group.rect.h - HEADER - 1).coerceAtLeast(1.0),
-            )
-            Squarify.layout(group.value.files, { it.totalLines.toDouble() }, inner)
-                .map { Cell(it.value, it.rect, group.value) }
+        if (grouped) {
+            groups = Squarify.layout(layers, { it.totalLines.toDouble() }, bounds)
+            cells = groups.flatMap { group ->
+                // Room for the folder name across the top of its box.
+                val inner = TreemapRect(
+                    group.rect.x + 1, group.rect.y + HEADER, group.rect.w - 2,
+                    (group.rect.h - HEADER - 1).coerceAtLeast(1.0),
+                )
+                Squarify.layout(group.value.files, { it.totalLines.toDouble() }, inner)
+                    .map { Cell(it.value, it.rect, group.value) }
+            }
+        } else {
+            groups = emptyList()
+            val layerOf = layers.flatMap { layer -> layer.files.map { it.path to layer } }.toMap()
+            val files = layers.flatMap { it.files }
+            cells = Squarify.layout(files, { it.totalLines.toDouble() }, bounds)
+                .map { Cell(it.value, it.rect, layerOf.getValue(it.value.path)) }
         }
         laidOutFor = Dimension(width, height)
+
+        val drawn = if (grouped) {
+            groups.filter { it.rect.w >= MIN_VISIBLE && it.rect.h >= MIN_VISIBLE }.map { it.value.folder }.toSet()
+        } else {
+            cells.filter { it.rect.w >= MIN_VISIBLE && it.rect.h >= MIN_VISIBLE }.map { it.layer.folder }.toSet()
+        }
+        val undrawn = layers.filter { it.folder !in drawn }
+        // Deferred: this runs inside paint, and a listener that revalidates a label mid-paint
+        // would be asking Swing to lay out while it is drawing.
+        onUndrawn?.let { SwingUtilities.invokeLater { it(undrawn) } }
     }
 
     override fun paintComponent(g: Graphics) {
@@ -228,12 +267,18 @@ class TrustTreemap : JComponent() {
 
         if (file.isDead) {
             // Hatching, so "delete this" never depends on telling one grey from another.
+            // Clipped to the cell: a diagonal line runs past both ends of its box, and left
+            // unclipped a tall dead cell smears stripes over every healthy file beside it,
+            // which is the picture claiming things that are not true.
+            val saved = g2.clip
+            g2.clipRect(box.x, box.y, box.width, box.height)
             g2.color = Color(255, 255, 255, if (dimmed) 20 else 46)
             var offset = -box.height
             while (offset < box.width) {
                 g2.drawLine(box.x + offset, box.y + box.height, box.x + offset + box.height, box.y)
                 offset += 7
             }
+            g2.clip = saved
         }
 
         g2.color = if (file.isDead) DEAD_EDGE else EDGE
@@ -268,25 +313,28 @@ class TrustTreemap : JComponent() {
         g2.drawString(label, box.x + 4, box.y + metrics.ascent + 3)
 
         if (box.height >= 42) {
-            val pct = "${percent.roundToInt()}%"
+            // "100%" on a dead cell is true and says nothing the hatching did not; the word
+            // is the information.
+            val corner = if (file.isDead) "dead" else "${percent.roundToInt()}%"
             g2.color = SHADOW
-            g2.drawString(pct, box.x + 5, box.y + box.height - 5)
+            g2.drawString(corner, box.x + 5, box.y + box.height - 5)
             g2.color = Color(255, 255, 255, 220)
-            g2.drawString(pct, box.x + 4, box.y + box.height - 6)
+            g2.drawString(corner, box.x + 4, box.y + box.height - 6)
         }
     }
 
     private fun paintGroupLabel(g2: Graphics2D, group: Tile<LayerSummary>) {
         val rect = group.rect
-        if (rect.h < HEADER || rect.w < 44) return
+        if (rect.h < HEADER || rect.w < 30) return
 
         val dimmed = selectedLayer != null && selectedLayer != group.value.folder
         g2.color = GROUP_EDGE
         g2.drawRect(rect.x.roundToInt(), rect.y.roundToInt(), rect.w.roundToInt() - 1, rect.h.roundToInt() - 1)
 
-        g2.font = UIUtil.getLabelFont().deriveFont(java.awt.Font.BOLD, JBUI.scaleFontSize(10f).toFloat())
+        g2.font = UIUtil.getLabelFont().deriveFont(Font.BOLD, JBUI.scaleFontSize(10f).toFloat())
         val metrics = g2.fontMetrics
         val text = shorten(group.value.name.uppercase(), metrics, rect.w.roundToInt() - 10)
+        if (text.isEmpty()) return
         val x = rect.x.roundToInt() + 5
         val y = rect.y.roundToInt() + metrics.ascent + 2
 
@@ -296,18 +344,22 @@ class TrustTreemap : JComponent() {
         g2.drawString(text, x, y)
     }
 
-    private fun shorten(text: String, metrics: java.awt.FontMetrics, available: Int): String {
+    private fun shorten(text: String, metrics: FontMetrics, available: Int): String {
         if (available <= 0) return ""
         if (metrics.stringWidth(text) <= available) return text
         var cut = text
         while (cut.isNotEmpty() && metrics.stringWidth("$cut…") > available) cut = cut.dropLast(1)
-        return if (cut.isEmpty()) "" else "$cut…"
+        // Two letters and an ellipsis reads as a glitch, not a name; the tooltip has it.
+        return if (cut.length < 3) "" else "$cut…"
     }
 
     private companion object {
         const val HEADER = 15.0
         const val DURATION_MS = 1150.0
         const val STAGGER = 0.4
+
+        /** Below this a box has no room for a name or a click, so the caption names it instead. */
+        const val MIN_VISIBLE = 14.0
 
         val SOLID = BasicStroke(1f)
         val DASHED = BasicStroke(1f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 4f, floatArrayOf(3f, 3f), 0f)

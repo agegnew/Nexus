@@ -155,6 +155,26 @@ class CoverageReportSourceTest {
         assertTrue(source.parse(report, root).isEmpty())
     }
 
+    @Test
+    fun `a file with no executable lines is left out rather than counted`() {
+        val root = temp.newFolder("project")
+        write(root, "app/__init__.py", lines = 0)
+        write(root, "app/main.py", lines = 3)
+
+        // coverage.py lists every package marker with an empty <lines/>.
+        val report = file(
+            root, "coverage.xml",
+            """
+            <coverage>
+              <class filename="app/__init__.py"><lines/></class>
+              <class filename="app/main.py"><lines><line number="2" hits="0"/></lines></class>
+            </coverage>
+            """.trimIndent(),
+        )
+
+        assertEquals(setOf("app/main.py"), source.parse(report, root).keys)
+    }
+
     private fun write(root: File, path: String, lines: Int): File =
         file(root, path, (1..lines).joinToString("\n") { "# line $it" })
 
