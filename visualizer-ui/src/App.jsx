@@ -13,6 +13,7 @@ import './App.css'
 import { DEMO_FIXTURES, demoGraph, demoIdFromParams } from './demo'
 
 const ArchitectureDiagram = lazy(() => import('./ArchitectureDiagram'))
+const ClientView = lazy(() => import('./ClientView'))
 
 const ROOT_ID = 'project-root'
 const HORIZONTAL_GAP = 300
@@ -258,7 +259,18 @@ export default function App() {
   ))
   const [expandedIds, setExpandedIds] = useState(() => new Set([ROOT_ID]))
   const [flowInstance, setFlowInstance] = useState(null)
-  const [activeView, setActiveView] = useState('code')
+  const [activeView, setActiveView] = useState(() => {
+    const requested = projectParams.get('view')
+    return ['code', 'architecture', 'client'].includes(requested) ? requested : 'code'
+  })
+  const [presenting, setPresenting] = useState(() => projectParams.get('present') === '1')
+
+  useEffect(() => {
+    if (!presenting) return undefined
+    const leaveOnEscape = (event) => { if (event.key === 'Escape') setPresenting(false) }
+    window.addEventListener('keydown', leaveOnEscape)
+    return () => window.removeEventListener('keydown', leaveOnEscape)
+  }, [presenting])
 
   useEffect(() => {
     const receiveGraph = (event) => {
@@ -310,7 +322,7 @@ export default function App() {
   const isReady = analysis?.status === 'ready'
 
   return (
-    <main className="visualizer">
+    <main className={`visualizer ${presenting ? 'visualizer--presenting' : ''}`}>
       <header className="visualizer-header">
         <div className="project-heading">
           <span className={`analysis-indicator ${analysis ? 'analysis-indicator--ready' : ''}`} aria-hidden="true" />
@@ -345,6 +357,14 @@ export default function App() {
           onClick={() => setActiveView('architecture')}
         >
           Architecture
+        </button>
+        <button
+          type="button"
+          className={activeView === 'client' ? 'view-switcher__active' : ''}
+          aria-pressed={activeView === 'client'}
+          onClick={() => setActiveView('client')}
+        >
+          Client view
         </button>
 
         {demoId && (
@@ -421,6 +441,29 @@ export default function App() {
         )}>
           <ArchitectureDiagram analysis={analysis} />
         </Suspense>
+      )}
+
+      {activeView === 'client' && isReady && (
+        <Suspense fallback={(
+          <section className="client-stage" aria-label="What this application does">
+            <div className="analysis-state" role="status"><strong>Preparing</strong></div>
+          </section>
+        )}>
+          <ClientView
+            analysis={analysis}
+            presenting={presenting}
+            onTogglePresent={() => setPresenting((current) => !current)}
+          />
+        </Suspense>
+      )}
+
+      {activeView === 'client' && !isReady && (
+        <section className="client-stage" aria-label="What this application does">
+          <div className="analysis-state" role="status">
+            <strong>Nothing to show yet</strong>
+            <span>{analysis?.message ?? 'Reading the project.'}</span>
+          </div>
+        </section>
       )}
 
       {activeView === 'architecture' && !isReady && (
