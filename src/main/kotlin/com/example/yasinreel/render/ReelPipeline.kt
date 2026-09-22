@@ -2,6 +2,7 @@ package com.example.yasinreel.render
 
 import com.example.yasinreel.harvest.ChangedFiles
 import com.example.yasinreel.harvest.EvidenceHarvester
+import com.example.yasinreel.model.AreaChange
 import com.example.yasinreel.model.RecapFacts
 import com.example.yasinreel.model.ReelScope
 import com.example.yasinreel.llm.EvidenceTools
@@ -269,7 +270,11 @@ class ReelPipeline(private val project: Project) {
                 linesDeleted = changed.deleted,
                 uncommittedFiles = changed.uncommitted,
                 authors = changed.authors,
-                subjects = changed.subjects.take(MAX_RECAP_SUBJECTS)
+                subjects = changed.subjects.take(MAX_RECAP_SUBJECTS),
+                areas = areasOf(changed.paths),
+                // The project as it stands, minus what this period did to it. Not a
+                // checkout of the old revision, and never claimed to be one.
+                linesBefore = (harvested.stats.totalLines - changed.added + changed.deleted).coerceAtLeast(0)
             )
         )
         stage(
@@ -321,6 +326,20 @@ class ReelPipeline(private val project: Project) {
      * wrote a film it never touched. That is the exact failure this banner exists for.
      */
     private data class Checked(val storyboard: Storyboard, val usedFallback: Boolean)
+
+    /**
+     * Where the period's work landed, as the project's own top level folders.
+     *
+     * The top level rather than the full path, because "backend" is a place a reader
+     * recognises and "backend/app/routers/campaigns.py" is a file only its author does.
+     * A file at the root is counted under the project itself rather than dropped.
+     */
+    private fun areasOf(paths: Set<String>): List<AreaChange> =
+        paths.groupingBy { it.replace('\\', '/').substringBefore('/', "project root") }
+            .eachCount()
+            .map { (name, files) -> AreaChange(name, files) }
+            .sortedWith(compareByDescending<AreaChange> { it.files }.thenBy { it.name })
+            .take(MAX_RECAP_AREAS)
 
     /** Stage 3. Guaranteed to return something playable, or to throw only if the fallback itself is broken. */
     private fun directCut(
@@ -668,6 +687,7 @@ class ReelPipeline(private val project: Project) {
         private const val POLL_MS = 100L
 
         /** Enough commit subjects to show the shape of the work without flooding the prompt. */
+        private const val MAX_RECAP_AREAS = 5
         private const val MAX_RECAP_SUBJECTS = 40
 
         fun getInstance(project: Project): ReelPipeline = project.service()

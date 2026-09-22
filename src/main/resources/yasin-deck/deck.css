@@ -35,7 +35,15 @@ body {
   line-height: 1.5;
 }
 
-.deck { display: flex; flex-direction: column; min-height: 100vh; }
+/*
+ * Exactly the viewport, never more.
+ *
+ * `min-height` let the column grow past the screen, so the presenter's slide sized
+ * itself to a height that did not exist and pushed the speaker notes 350px below the
+ * fold, where no amount of scrolling reached them because the page itself was what
+ * had grown. The inner flex chain can only distribute space that is bounded.
+ */
+.deck { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 
 .deck__head {
   display: flex; align-items: baseline; gap: var(--space-sm);
@@ -105,12 +113,7 @@ body {
   color: var(--text-muted, #79859A);
 }
 
-.scope__modes { display: flex; flex-wrap: wrap; gap: 14px; }
 
-.scope__mode { display: flex; gap: 8px; align-items: flex-start; cursor: pointer; }
-.scope__mode span { display: grid; gap: 2px; }
-.scope__mode strong { font-size: 13px; }
-.scope__mode small { color: var(--text-muted, #79859A); font-size: 11px; }
 
 .scope__range {
   display: flex;
@@ -194,34 +197,154 @@ body {
 .chip--go { background: var(--accent); border-color: var(--accent); color: #FFFFFF; }
 .chip--go:hover { background: #2559D8; border-color: #2559D8; }
 
-/* ------------------------------------------------------------- the thumbnails */
-
-.sheet {
-  flex: 1; min-height: 0; overflow-y: auto;
-  display: grid; gap: var(--space-lg);
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  padding: var(--space-lg);
-  align-content: start;
-}
-
-.thumb { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+/* ------------------------------------------------------------- the presenter */
 
 /*
- * A fixed 1280x720 coordinate space scaled by one transform, exactly as the reel stage
- * is. It is what lets every shape below be positioned in the same pixels the .pptx
- * writer converts to EMU, with no second set of numbers to keep in step.
+ * A rail of slides beside one large slide, with the notes under it.
+ *
+ * Laid out with grid rather than flex so the rail keeps its width when a slide title
+ * runs long: the whole point of the rail is that it stays where the eye last left it.
  */
-.thumb__frame {
+.present {
+  flex: 1; min-height: 0;
+  display: grid; grid-template-columns: 168px minmax(0, 1fr);
+  gap: var(--space-lg);
+  padding: var(--space-lg);
+}
+
+/* -------------------------------------------------------------------- the rail */
+
+.rail {
+  min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+  display: flex; flex-direction: column; gap: 10px;
+  padding-right: 4px;
+}
+.rail__item {
+  display: flex; flex-direction: column; gap: 5px;
+  padding: 5px; border: 1px solid transparent; border-radius: 8px;
+  background: none; cursor: pointer; text-align: left;
+  font: inherit; color: inherit;
+}
+.rail__item:hover { background: var(--surface-hover); }
+.rail__item:focus-visible { outline: 2px solid var(--accent-warm); outline-offset: 1px; }
+/* The current slide, marked on the rail and not only in the counter. */
+.rail__item[data-on="true"] { background: var(--surface-node); border-color: var(--accent); }
+.rail__item[data-on="true"] .rail__name { color: var(--text-primary); font-weight: 600; }
+
+.rail__frame {
   position: relative; overflow: hidden;
   width: 100%; aspect-ratio: 16 / 9;
   background: #FFFFFF;
-  border: 1px solid var(--border-subtle); border-radius: 6px;
-  box-shadow: 0 1px 2px rgba(13, 21, 38, .05);
+  border: 1px solid var(--border-subtle); border-radius: 4px;
 }
-.thumb__stage { position: absolute; top: 0; left: 0; width: 1280px; height: 720px; transform-origin: 0 0; }
-.thumb__cap { display: flex; gap: 6px; align-items: baseline; min-width: 0; }
-.thumb__no { font-family: var(--font-code); font-size: 11px; color: var(--text-muted); flex: 0 0 auto; }
-.thumb__name { font-size: 11px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rail__item[data-on="true"] .rail__frame { border-color: var(--accent); }
+.rail__stage {
+  position: absolute; top: 0; left: 0; width: 1280px; height: 720px;
+  transform-origin: 0 0;
+}
+.rail__cap { display: flex; gap: 5px; align-items: baseline; min-width: 0; }
+.rail__no { font-family: var(--font-code); font-size: 10px; color: var(--text-muted); flex: 0 0 auto; }
+.rail__name {
+  font-size: 10px; color: var(--text-secondary); min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------ the viewer */
+
+.viewer { min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 10px; }
+
+/*
+ * The slide sits in whatever space is left after the bar and the notes, and keeps 16:9.
+ * Sized by its height rather than its width, because the tool window is usually wider
+ * than it is tall and a slide that fills the width would push its own notes off screen.
+ */
+.viewer__stagewrap {
+  flex: 1 1 auto; min-height: 0;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 8px;
+}
+.viewer__stagewrap:focus-visible { outline: 2px solid var(--accent-warm); outline-offset: 2px; }
+.viewer__frame {
+  position: relative; overflow: hidden;
+  height: 100%; aspect-ratio: 16 / 9; max-width: 100%;
+  background: #FFFFFF;
+  border: 1px solid var(--border-subtle); border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(13, 21, 38, .10);
+}
+.viewer__stage {
+  position: absolute; top: 0; left: 0; width: 1280px; height: 720px;
+  transform-origin: 0 0;
+}
+
+.viewer__bar { flex: 0 0 auto; display: flex; align-items: center; gap: 10px; min-width: 0; }
+.nav {
+  width: 30px; height: 28px; flex: 0 0 auto;
+  display: grid; place-items: center;
+  font-size: 19px; line-height: 1;
+  background: var(--surface-node); color: var(--text-primary);
+  border: 1px solid var(--border-subtle); border-radius: 6px; cursor: pointer;
+}
+.nav:hover:not(:disabled) { background: var(--surface-hover); border-color: var(--accent); }
+.nav:disabled { opacity: .4; cursor: default; }
+.nav:focus-visible { outline: 2px solid var(--accent-warm); outline-offset: 2px; }
+.viewer__count { font-family: var(--font-code); font-size: 12px; color: var(--text-secondary); flex: 0 0 auto; }
+.viewer__count strong { color: var(--text-primary); }
+.viewer__name {
+  font-size: 12px; color: var(--text-muted); min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------- the notes */
+
+/*
+ * The one thing a deck has that a film does not.
+ *
+ * A film says everything out loud; a deck is read by somebody who has to say it
+ * themselves, and until now the notes were reachable only by hovering a thumbnail and
+ * waiting for a tooltip. They belong on screen, under the slide they belong to.
+ */
+.notes {
+  flex: 0 0 auto; max-height: 34%;
+  display: flex; flex-direction: column; min-height: 0;
+  background: var(--surface-node);
+  border: 1px solid var(--border-subtle); border-radius: 8px;
+}
+.notes[hidden] { display: none; }
+.notes__head {
+  flex: 0 0 auto; display: flex; align-items: center; gap: 10px;
+  padding: 6px 10px; border-bottom: 1px solid var(--border-subtle);
+}
+.notes__tabs { display: flex; gap: 2px; }
+.notes__tab {
+  padding: 4px 10px; border: 0; border-radius: 5px; cursor: pointer;
+  background: none; color: var(--text-muted);
+  font: inherit; font-size: 11px; font-weight: 600;
+}
+.notes__tab:hover { background: var(--surface-hover); color: var(--text-secondary); }
+.notes__tab[aria-selected="true"] { background: var(--surface-hover); color: var(--text-primary); }
+.notes__tab:focus-visible { outline: 2px solid var(--accent-warm); outline-offset: -1px; }
+.notes__hint { font-size: 11px; color: var(--text-muted); margin-left: auto; }
+
+.notes__body {
+  flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+  padding: 10px 12px;
+  font-size: 13px; line-height: 1.55; color: var(--text-secondary);
+}
+.notes__body p { margin: 0; }
+.notes__body--empty { color: var(--text-muted); font-style: italic; }
+
+.notes__body--list { padding: 6px; display: flex; flex-direction: column; gap: 2px; }
+.note { border-radius: 6px; padding: 6px 8px; }
+.note[data-on="true"] { background: var(--surface-hover); }
+.note__head {
+  display: flex; gap: 7px; align-items: baseline; width: 100%;
+  background: none; border: 0; padding: 0; cursor: pointer; font: inherit; text-align: left;
+}
+.note__head:focus-visible { outline: 2px solid var(--accent-warm); outline-offset: 2px; border-radius: 3px; }
+.note__no { font-family: var(--font-code); font-size: 10px; color: var(--text-muted); flex: 0 0 auto; }
+.note__title { font-size: 12px; font-weight: 600; color: var(--text-primary); }
+.note__body { margin: 2px 0 0 25px; font-size: 12px; line-height: 1.5; color: var(--text-secondary); }
+.note__body--empty { color: var(--text-muted); font-style: italic; }
 
 /* One shape, one absolutely positioned box. Nothing here decides anything. */
 .sh { position: absolute; }
@@ -259,3 +382,63 @@ body {
 
 /* Embedded in the Map page, which already carries the project name and the views. */
 :root[data-embedded] .deck__head { display: none; }
+
+/* ----------------------------------------------------------- the period control */
+
+/*
+ * One row of choices, from the whole project down to a hand picked range.
+ *
+ * It replaced a pair of radio buttons plus a separate, conditionally visible period
+ * block. That was two questions for what a person experiences as one, and the second
+ * of them was invisible until the first had been answered a particular way.
+ */
+.scope__chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chipp {
+  padding: 6px 12px; border-radius: 999px; cursor: pointer;
+  background: var(--surface-node); color: var(--text-secondary);
+  border: 1px solid var(--border-subtle);
+  font: inherit; font-size: 12px; font-weight: 500;
+}
+.chipp:hover { border-color: var(--accent); color: var(--text-primary); }
+.chipp:focus-visible { outline: 2px solid var(--accent-warm); outline-offset: 2px; }
+.chipp[aria-pressed="true"] {
+  background: var(--accent); border-color: var(--accent); color: #FFFFFF; font-weight: 600;
+}
+
+.scope__calendar { margin-top: 4px; }
+.cals { display: flex; gap: 18px; flex-wrap: wrap; }
+.cal { width: 196px; }
+.cal__head { display: flex; align-items: center; gap: 6px; height: 24px; margin-bottom: 4px; }
+.cal__name { flex: 1; text-align: center; font-size: 12px; font-weight: 600; color: var(--text-primary); }
+.cal__arrow {
+  width: 22px; height: 22px; flex: 0 0 auto; display: grid; place-items: center;
+  background: var(--surface-node); color: var(--text-secondary);
+  border: 1px solid var(--border-subtle); border-radius: 5px; cursor: pointer;
+  font: inherit; font-size: 15px; line-height: 1;
+}
+.cal__arrow:hover { border-color: var(--accent); color: var(--text-primary); }
+.cal__grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; }
+.cal__dow {
+  height: 20px; display: grid; place-items: center;
+  font-size: 10px; font-weight: 600; color: var(--text-muted);
+}
+.cal__day {
+  height: 24px; display: grid; place-items: center;
+  background: none; border: 0; border-radius: 4px; cursor: pointer;
+  font: inherit; font-size: 11px; color: var(--text-primary);
+}
+.cal__day:hover:not(:disabled) { background: var(--surface-hover); }
+.cal__day:disabled { color: var(--text-muted); opacity: .35; cursor: default; }
+.cal__day:focus-visible { outline: 2px solid var(--accent-warm); outline-offset: -1px; }
+/* A day inside the range, and the two that bound it. */
+.cal__day[data-in="true"] { background: var(--surface-hover); border-radius: 0; }
+.cal__day[data-edge] { background: var(--accent); color: #FFFFFF; font-weight: 700; }
+.cal__day[data-today="true"]:not([data-edge]) { box-shadow: inset 0 0 0 1px var(--accent); }
+
+.scope__dates { margin: 0; font-size: 12px; color: var(--text-secondary); }
+.scope__filters {
+  display: flex; flex-wrap: wrap; gap: 14px; align-items: center;
+  margin-top: 4px; padding-top: 10px; border-top: 1px solid var(--border-subtle);
+}
+.scope__filters[hidden] { display: none; }
+

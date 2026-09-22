@@ -13,6 +13,14 @@
  *
  * The page owns the markup. This owns the meaning. Both pages use the same element ids,
  * and anything missing is simply skipped, so a page may offer a subset of the controls.
+ *
+ * ### One control, not two
+ *
+ * There used to be a pair of radio buttons choosing between "the product" and "a progress
+ * update", and then, underneath and only sometimes visible, a period. That is two
+ * questions for what a person experiences as one: how far back do you want to go. So the
+ * whole project is now simply the widest choice in the same row as last week, and the
+ * mode is derived from the period rather than asked for separately.
  */
 window.NexusScope = (function () {
   'use strict';
@@ -62,44 +70,207 @@ window.NexusScope = (function () {
    * are free to name their radios after the thing they produce.
    */
   function mode() {
-    var host = el('scope');
-    var checked = host && host.querySelector('input[type="radio"]:checked');
-    return checked ? checked.value : 'launch';
+    return chosen() === WHOLE ? 'launch' : 'recap';
+  }
+
+  /** The widest period there is: no dates at all, the project as it stands. */
+  var WHOLE = 'whole';
+
+  /**
+   * The period, which is now the only thing the panel asks.
+   *
+   * Held in a hidden select rather than in a variable so that a page can still be driven
+   * without JavaScript having run, and so the value survives the panel being rebuilt when
+   * the project's areas arrive.
+   */
+  function chosen() {
+    var period = el('scope-period');
+    return period ? period.value : WHOLE;
+  }
+
+  function choose(value) {
+    var period = el('scope-period');
+    if (!period) return;
+    period.value = value;
+    // Written by us, so it does not bubble on its own.
+    period.dispatchEvent(new Event('change', { bubbles: true }));
   }
 
   function isRecap() { return mode() === 'recap'; }
 
   function range() {
-    var period = el('scope-period');
-    var chosen = period ? period.value : 'last-week';
-    if (chosen === 'custom') {
+    var pick = chosen();
+    if (pick === WHOLE) return { since: '', until: '' };
+    if (pick === 'custom') {
       var from = el('scope-from');
       var to = el('scope-to');
       return { since: (from && from.value) || '', until: (to && to.value) || '' };
     }
-    var pair = periodDates(chosen);
+    var pair = periodDates(pick);
     return pair ? { since: isoDay(pair[0]), until: isoDay(pair[1]) } : { since: '', until: '' };
   }
 
-  /** Shows the range controls only when they apply, and echoes the dates a preset resolved to. */
-  function refresh() {
-    var recap = isRecap();
-    var host = el('scope-range');
-    if (host) host.hidden = !recap;
+  /* ------------------------------------------------------------------ calendar */
 
-    var period = el('scope-period');
-    var custom = !!period && period.value === 'custom';
-    var from = el('scope-from-field');
-    var to = el('scope-to-field');
-    if (from) from.hidden = !custom;
-    if (to) to.hidden = !custom;
+  var MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'];
+  var DAYS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+
+  /** Which month the calendar is showing. Only ever moved by the arrows. */
+  var showing = null;
+  /** The first click of a new range, held until the second lands. */
+  var pending = null;
+
+  function spoken(iso) {
+    if (!iso) return '';
+    var parts = iso.split('-');
+    return Number(parts[2]) + ' ' + MONTHS[Number(parts[1]) - 1] + ' ' + parts[0];
+  }
+
+  function daysBetween(a, b) {
+    return Math.round((new Date(b) - new Date(a)) / 86400000) + 1;
+  }
+
+  /**
+   * Two months of clickable days.
+   *
+   * Two rather than one because a range that crosses a month boundary is the common case,
+   * and paging back and forth to place the second end of it is where a one month picker
+   * becomes annoying. The first click sets the start and clears the end; the second sets
+   * the end, and clicking earlier than the start starts again rather than producing a
+   * backwards range nobody meant.
+   */
+  function drawCalendar() {
+    var host = el('scope-cal');
+    if (!host) return;
+    var current = range();
+    var start = pending || current.since;
+    var end = pending ? '' : current.until;
+
+    if (!showing) {
+      var anchor = start ? new Date(start + 'T00:00:00') : new Date();
+      showing = new Date(anchor.getFullYear(), anchor.getMonth() - 1, 1);
+    }
+
+    host.textContent = '';
+    for (var m = 0; m < 2; m++) {
+      var month = new Date(showing.getFullYear(), showing.getMonth() + m, 1);
+      host.appendChild(drawMonth(month, start, end, m));
+    }
+  }
+
+  function drawMonth(month, start, end, index) {
+    var wrap = document.createElement('div');
+    wrap.className = 'cal';
+
+    var head = document.createElement('div');
+    head.className = 'cal__head';
+    if (index === 0) head.appendChild(arrowButton('\u2039', -1));
+    var name = document.createElement('span');
+    name.className = 'cal__name';
+    name.textContent = MONTHS[month.getMonth()] + ' ' + month.getFullYear();
+    head.appendChild(name);
+    if (index === 1) head.appendChild(arrowButton('\u203A', 1));
+    wrap.appendChild(head);
+
+    var grid = document.createElement('div');
+    grid.className = 'cal__grid';
+    DAYS.forEach(function (d) {
+      var cell = document.createElement('span');
+      cell.className = 'cal__dow';
+      cell.textContent = d;
+      grid.appendChild(cell);
+    });
+
+    // Monday first, matching startOfWeek, so the columns mean the same thing everywhere.
+    var lead = (new Date(month.getFullYear(), month.getMonth(), 1).getDay() + 6) % 7;
+    for (var i = 0; i < lead; i++) grid.appendChild(document.createElement('span'));
+
+    var today = isoDay(new Date());
+    var last = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
+    for (var day = 1; day <= last; day++) {
+      var iso = isoDay(new Date(month.getFullYear(), month.getMonth(), day));
+      var cell = document.createElement('button');
+      cell.type = 'button';
+      cell.className = 'cal__day';
+      cell.textContent = String(day);
+      cell.setAttribute('data-iso', iso);
+      // A range that has not happened yet has no commits in it.
+      if (iso > today) cell.disabled = true;
+      if (iso === start) cell.setAttribute('data-edge', 'start');
+      if (end && iso === end) cell.setAttribute('data-edge', 'end');
+      if (start && end && iso > start && iso < end) cell.setAttribute('data-in', 'true');
+      if (iso === today) cell.setAttribute('data-today', 'true');
+      grid.appendChild(cell);
+    }
+    wrap.appendChild(grid);
+    return wrap;
+  }
+
+  function arrowButton(glyph, by) {
+    var button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'cal__arrow';
+    button.textContent = glyph;
+    button.setAttribute('data-move', String(by));
+    button.setAttribute('aria-label', by < 0 ? 'Earlier months' : 'Later months');
+    return button;
+  }
+
+  /** A day was clicked. Returns true when the range changed and callers should refresh. */
+  function pickDay(iso) {
+    var from = el('scope-from');
+    var to = el('scope-to');
+    if (!from || !to) return false;
+    if (!pending || iso < pending) {
+      pending = iso;
+      from.value = iso;
+      to.value = '';
+    } else {
+      from.value = pending;
+      to.value = iso;
+      pending = null;
+    }
+    return true;
+  }
+
+  /* ------------------------------------------------------------------- refresh */
+
+  /** Shows the range controls only when they apply, and spells out the dates in words. */
+  function refresh() {
+    var pick = chosen();
+    var custom = pick === 'custom';
+
+    var chips = el('scope-chips');
+    if (chips) {
+      var buttons = chips.querySelectorAll('[data-period]');
+      for (var i = 0; i < buttons.length; i++) {
+        buttons[i].setAttribute('aria-pressed', buttons[i].getAttribute('data-period') === pick ? 'true' : 'false');
+      }
+    }
+
+    // The filters only mean something for a period, so they are not offered for the
+    // whole project, where "only my commits" would quietly hide most of the codebase.
+    var filters = el('scope-filters');
+    if (filters) filters.hidden = pick === WHOLE;
+
+    var cal = el('scope-calendar');
+    if (cal) cal.hidden = !custom;
+    if (custom) drawCalendar();
 
     var echo = el('scope-dates');
     if (echo) {
       var current = range();
-      // A preset is a promise about dates the reader cannot see, so it is spelled out.
-      // A custom range is already on screen in two date fields, so repeating it is noise.
-      echo.textContent = custom || !current.since ? '' : current.since + ' to ' + current.until;
+      if (pick === WHOLE) {
+        echo.textContent = 'Everything in the project as it stands today.';
+      } else if (pending) {
+        echo.textContent = 'From ' + spoken(pending) + '. Now pick the last day.';
+      } else if (current.since && current.until) {
+        echo.textContent = spoken(current.since) + ' to ' + spoken(current.until) +
+          '  \u00b7  ' + daysBetween(current.since, current.until) + ' days';
+      } else {
+        echo.textContent = 'Pick the first day of the period.';
+      }
     }
   }
 
@@ -164,16 +335,59 @@ window.NexusScope = (function () {
    * would be listening to an element nobody can reach.
    */
   function watch(onChange) {
-    document.addEventListener('change', function (event) {
-      if (!event.target.closest || !event.target.closest('#scope')) return;
+    function changed() {
       refresh();
       if (onChange) onChange();
+    }
+
+    document.addEventListener('change', function (event) {
+      if (!event.target.closest || !event.target.closest('#scope')) return;
+      changed();
     });
+
+    /*
+     * Clicks, for the three controls that are buttons rather than fields: the period
+     * chips, the calendar's days and its month arrows. Delegated from the document for
+     * the same reason the change handler is, and more so here, because the calendar is
+     * rebuilt from scratch every time the range moves.
+     */
+    document.addEventListener('click', function (event) {
+      var target = event.target;
+      if (!target.closest || !target.closest('#scope')) return;
+
+      var chip = target.closest('[data-period]');
+      if (chip) {
+        event.preventDefault();
+        // Reopening the calendar starts a fresh range rather than resuming a half
+        // finished one the reader has long since forgotten about.
+        if (chip.getAttribute('data-period') === 'custom') { pending = null; showing = null; }
+        choose(chip.getAttribute('data-period'));
+        return;
+      }
+
+      var move = target.closest('[data-move]');
+      if (move) {
+        event.preventDefault();
+        showing = new Date(showing.getFullYear(), showing.getMonth() + Number(move.getAttribute('data-move')), 1);
+        drawCalendar();
+        return;
+      }
+
+      var day = target.closest('[data-iso]');
+      if (day && !day.disabled) {
+        event.preventDefault();
+        if (pickDay(day.getAttribute('data-iso'))) changed();
+      }
+    });
+
     refresh();
   }
 
   return {
+    WHOLE: WHOLE,
     isoDay: isoDay,
+    spoken: spoken,
+    choose: choose,
     periodDates: periodDates,
     mode: mode,
     isRecap: isRecap,

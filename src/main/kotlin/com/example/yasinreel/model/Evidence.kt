@@ -64,8 +64,27 @@ data class RecapFacts(
     val uncommittedFiles: Int,
     val authors: List<String>,
     /** Commit subjects, newest first: the plainest statement of intent the history has. */
-    val subjects: List<String>
+    val subjects: List<String>,
+    /**
+     * Where the work landed, counted rather than described.
+     *
+     * A period's numbers say how much changed. They do not say where, and "where" is the
+     * first thing anyone asks when shown that four thousand lines moved. Derived from the
+     * changed paths, so it is a fact about the period and not a judgement about it.
+     */
+    val areas: List<AreaChange> = emptyList(),
+    /**
+     * Total lines across the project before the period began.
+     *
+     * The harvester counts the project as it stands now, which is the after. The before is
+     * that number with the period's own work taken back out of it, which is the only
+     * honest before available without checking the old revision out.
+     */
+    val linesBefore: Int = 0
 )
+
+/** One part of the project and how much of the period landed in it. */
+data class AreaChange(val name: String, val files: Int)
 
 data class EvidenceStats(
     val totalFiles: Int,

@@ -20,8 +20,10 @@
   if (window.parent !== window) document.documentElement.setAttribute('data-embedded', '');
 
   var dom = {};
-  var thumbs = [];
   var busy = false;
+
+  /** The deck on screen: its slides, which one is showing, and the rail's buttons. */
+  var show = { slides: [], at: 0, rail: [], notes: [] };
 
   /*
    * The date range, from /shared/scope.js, which the Reel tab loads too. Guarded because
@@ -42,7 +44,21 @@
   function cache() {
     dom.picker = byId('picker');
     dom.result = byId('result');
-    dom.sheet = byId('sheet');
+    dom.rail = byId('rail');
+    dom.stagewrap = byId('stagewrap');
+    dom.slideFrame = byId('slide-frame');
+    dom.slideStage = byId('slide-stage');
+    dom.slideNo = byId('slide-no');
+    dom.slideTotal = byId('slide-total');
+    dom.slideName = byId('slide-name');
+    dom.prev = byId('prev');
+    dom.next = byId('next');
+    dom.notes = byId('notes');
+    dom.notesToggle = byId('notes-toggle');
+    dom.notesOne = byId('notes-one');
+    dom.notesAll = byId('notes-all');
+    dom.tabOne = byId('tab-one');
+    dom.tabAll = byId('tab-all');
     dom.status = byId('status');
     dom.project = byId('project-name');
     dom.title = byId('result-title');
@@ -55,6 +71,122 @@
     dom.noticeBody = byId('notice-body');
     dom.noticeClose = byId('notice-close');
     dom.buttons = [byId('cut-technical'), byId('cut-stakeholder')];
+  }
+
+  /* ------------------------------------------------------------- the presenter */
+
+  /**
+   * Shows slide [index], clamped, and everything that follows from which one it is.
+   *
+   * One function rather than a handler per control, because the rail, the counter, the
+   * arrows and the notes all say the same thing and the only way to keep them agreeing
+   * is for one place to set them.
+   */
+  function goTo(index) {
+    var total = show.slides.length;
+    if (!total) return;
+    var at = Math.max(0, Math.min(total - 1, index));
+    show.at = at;
+    var art = show.slides[at] || {};
+
+    window.DeckPreview.paint(dom.slideStage, art);
+    fitSlide();
+
+    dom.slideNo.textContent = String(at + 1);
+    dom.slideTotal.textContent = String(total);
+    dom.slideName.textContent = art.title || '';
+    dom.prev.disabled = at === 0;
+    dom.next.disabled = at === total - 1;
+
+    show.rail.forEach(function (item, i) {
+      item.el.setAttribute('data-on', i === at ? 'true' : 'false');
+    });
+    // Keep the current thumbnail in view when the arrows moved us, not only when clicked.
+    var current = show.rail[at];
+    if (current && current.el.scrollIntoView) {
+      current.el.scrollIntoView({ block: 'nearest' });
+    }
+
+    dom.notesOne.textContent = art.notes || 'No notes for this slide.';
+    dom.notesOne.classList.toggle('notes__body--empty', !art.notes);
+    show.notes.forEach(function (note, i) {
+      note.setAttribute('data-on', i === at ? 'true' : 'false');
+    });
+  }
+
+  function step(by) {
+    goTo(show.at + by);
+  }
+
+  /** The big slide is a fixed 1280 wide stage scaled to whatever its frame ended up. */
+  function fitSlide() {
+    window.DeckPreview.fitOne(dom.slideFrame, dom.slideStage);
+  }
+
+  function fitRail() {
+    show.rail.forEach(function (item) {
+      window.DeckPreview.fitOne(item.frame, item.stage);
+    });
+  }
+
+  /**
+   * A trackpad swipe or a wheel notch moves one slide, not a scroll.
+   *
+   * Accumulated and gated rather than one slide per event, because a trackpad emits a
+   * stream of small deltas for a single flick and acting on each one would skip half the
+   * deck. The gate resets once the stream stops, which is what makes one flick one slide.
+   */
+  var wheelAt = 0;
+  var wheelSum = 0;
+  function onWheel(event) {
+    var now = Date.now();
+    if (now - wheelAt > 220) wheelSum = 0;
+    wheelAt = now;
+    // Horizontal counts too: on a trackpad, sideways is the natural way to move a deck.
+    var delta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
+    wheelSum += delta;
+    if (Math.abs(wheelSum) < 40) return;
+    event.preventDefault();
+    step(wheelSum > 0 ? 1 : -1);
+    wheelSum = 0;
+  }
+
+  function onKey(event) {
+    if (dom.result.hidden) return;
+    // Never steal a key from somebody typing a date into the picker.
+    var tag = (event.target && event.target.tagName) || '';
+    if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+
+    switch (event.key) {
+      case 'ArrowRight': case 'ArrowDown': case 'PageDown': case ' ': step(1); break;
+      case 'ArrowLeft': case 'ArrowUp': case 'PageUp': step(-1); break;
+      case 'Home': goTo(0); break;
+      case 'End': goTo(show.slides.length - 1); break;
+      default: return;
+    }
+    event.preventDefault();
+  }
+
+  /** "This slide" or "All notes". The list is the one a presenter rehearses from. */
+  function notesTab(all) {
+    dom.notesOne.hidden = all;
+    dom.notesAll.hidden = !all;
+    dom.tabOne.setAttribute('aria-selected', all ? 'false' : 'true');
+    dom.tabAll.setAttribute('aria-selected', all ? 'true' : 'false');
+  }
+
+  function mount(slides) {
+    show.slides = slides || [];
+    show.at = 0;
+    show.rail = window.DeckPreview.rail(dom.rail, show.slides, goTo);
+    show.notes = window.DeckPreview.notes(dom.notesAll, show.slides, function (i) {
+      goTo(i);
+      notesTab(false);
+    });
+    fitRail();
+    goTo(0);
+    // So the arrow keys work without the reader having to find something to click first.
+    if (dom.stagewrap.focus) dom.stagewrap.focus({ preventScroll: true });
   }
 
   function send(message) {
@@ -155,9 +287,24 @@
     dom.open.addEventListener('click', function () { send({ type: 'open' }); });
     dom.reveal.addEventListener('click', function () { send({ type: 'reveal' }); });
     dom.noticeClose.addEventListener('click', function () { notice(null, null); });
-    // The thumbnails are a fixed coordinate space scaled to their column, so a resized
-    // tool window has to rescale them rather than reflow them.
-    window.addEventListener('resize', function () { window.DeckPreview.fit(thumbs); });
+
+    dom.prev.addEventListener('click', function () { step(-1); });
+    dom.next.addEventListener('click', function () { step(1); });
+    dom.stagewrap.addEventListener('wheel', onWheel, { passive: false });
+    document.addEventListener('keydown', onKey);
+    dom.tabOne.addEventListener('click', function () { notesTab(false); });
+    dom.tabAll.addEventListener('click', function () { notesTab(true); });
+    dom.notesToggle.addEventListener('click', function () {
+      var on = dom.notes.hidden;
+      dom.notes.hidden = !on;
+      dom.notesToggle.setAttribute('aria-pressed', on ? 'true' : 'false');
+      // The slide grows into the space the notes gave back, so it has to be remeasured.
+      fitSlide();
+    });
+
+    // Every stage is a fixed coordinate space scaled to its frame, so a resized tool
+    // window has to rescale them rather than reflow them.
+    window.addEventListener('resize', function () { fitSlide(); fitRail(); });
     scope.watch(describeButtons);
   }
 
@@ -197,12 +344,12 @@
         payload.cacheHit ? 'reused this project’s analysis' : null
       ].filter(Boolean).join('  ·  ');
 
-      // Shown before drawn, not after. A thumbnail is a fixed 1280px stage scaled to
-      // whatever width its column ended up with, and a hidden panel has no width, so
-      // rendering first meant every scale was computed against zero and skipped.
       dom.picker.hidden = true;
       dom.result.hidden = false;
-      thumbs = window.DeckPreview.render(dom.sheet, payload.slides_art || []);
+      // Shown before drawn, not after. Every stage is a fixed 1280px space scaled to
+      // whatever width its frame ended up with, and a hidden panel has no width, so
+      // drawing first meant every scale was computed against zero and skipped.
+      mount(payload.slides_art || []);
 
       if (payload.issues && payload.issues.length) {
         notice(

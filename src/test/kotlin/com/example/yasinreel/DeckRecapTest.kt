@@ -354,14 +354,35 @@ class DeckRecapTest {
             assertTrue("the $name page does not load the shared control", page.contains("/shared/scope.js"))
         }
 
-        // Every preset the pages offer has to be one the script can resolve, or it
-        // quietly produces an empty range and the IDE is asked for the whole project.
-        val known = Regex("case '([a-z0-9-]+)':").findAll(shared).map { it.groupValues[1] }.toSet() + "custom"
+        /*
+         * Every period the pages offer has to be one the script can resolve, or it quietly
+         * produces an empty range and the IDE is asked for the whole project instead of
+         * the fortnight somebody picked.
+         *
+         * Two of them resolve to no dates deliberately and are read out of the script
+         * rather than listed here, so adding a third cannot pass by being forgotten:
+         * `custom` means the calendar decides, and `whole` means there is no period at all.
+         */
+        val presets = Regex("case '([a-z0-9-]+)':").findAll(shared).map { it.groupValues[1] }.toSet()
+        val whole = Regex("var WHOLE = '([a-z]+)'").find(shared)?.groupValues?.get(1)
+        assertNotNull("the shared control should name its widest period", whole)
+        val known = presets + "custom" + whole!!
+
         listOf(reel to "reel", deck to "deck").forEach { (page, name) ->
             val block = page.substringAfter("id=\"scope-period\"").substringBefore("</select>")
-            Regex("value=\"([a-z0-9-]+)\"").findAll(block).map { it.groupValues[1] }.forEach { option ->
+            val offered = Regex("value=\"([a-z0-9-]+)\"").findAll(block).map { it.groupValues[1] }.toSet()
+            offered.forEach { option ->
                 assertTrue("the $name page offers '$option', which the shared control cannot resolve", option in known)
             }
+
+            /*
+             * The chips and the hidden select are two lists of the same thing, and the
+             * chips are the only one a person can see. A chip with no matching option
+             * writes a value the select rejects, so the period silently does not change.
+             */
+            val chips = Regex("data-period=\"([a-z0-9-]+)\"").findAll(page).map { it.groupValues[1] }.toSet()
+            assertTrue("the $name page shows no period chips", chips.size >= 4)
+            assertEquals("the $name page's chips and its period list disagree", offered, chips)
         }
     }
 }

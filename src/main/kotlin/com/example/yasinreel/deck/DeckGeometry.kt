@@ -44,6 +44,7 @@ object DeckGeometry {
                 SlideLayout.STACK -> stack(shapes, slots, accent, taken)
                 SlideLayout.JOURNEY -> journey(shapes, slots, accent, taken)
                 SlideLayout.PRODUCT_UI -> productUi(shapes, slots, accent)
+                SlideLayout.BEFORE_AFTER -> beforeAfter(shapes, slots, accent)
                 SlideLayout.GAPS -> gaps(shapes, slots, accent, taken)
                 SlideLayout.CLOSING -> closing(shapes, deck, slots, taken)
                 // An unknown layout must never produce a blank slide, so it degrades to
@@ -680,6 +681,98 @@ object DeckGeometry {
                 out += Box(x + 20, cardY + 44, (cardW * 0.72).toInt(), 6, line, roundPct = 50)
                 out += Box(x + 20, cardY + 60, (cardW * 0.58).toInt(), 6, line, roundPct = 50)
             }
+        }
+        return title
+    }
+
+    /**
+     * Where the period left the project, against where it found it.
+     *
+     * Two columns and an arrow, then the places the work landed. The arrow matters more
+     * than it looks: two numbers side by side are a comparison only if something says
+     * which way to read them, and without it a reader has to work out from the values
+     * alone which column is the past.
+     */
+    private fun beforeAfter(out: MutableList<Shape>, slots: JsonObject, accent: Int): String {
+        val title = header(out, slots.str("eyebrow") ?: "Before and after", slots.str("heading") ?: "What moved", accent)
+        val rows = slots.list("rows").take(Caps.MAX_DELTA_ROWS)
+        if (rows.isEmpty()) return title
+
+        val colour = DeckTheme.accent(accent)
+        val areas = slots.list("areas").take(Caps.MAX_GROUPS)
+        val panelH = if (areas.isEmpty()) BODY_H else BODY_H - 148
+
+        // The two columns, with the arrow in the gutter between them.
+        val gap = 88
+        val colW = (CONTENT_W - gap) / 2
+        listOf(0, 1).forEach { side ->
+            val x = MARGIN + side * (colW + gap)
+            val before = side == 0
+            out += Box(x, BODY_Y, colW, panelH, if (before) DeckTheme.WASH else wash(colour), roundPct = 3)
+            if (!before) out += Box(x, BODY_Y, 5, panelH, colour)
+
+            out += Label(
+                x + 26, BODY_Y + 22, colW - 52, 20,
+                listOf(if (before) "BEFORE" else "AFTER"), 14,
+                if (before) DeckTheme.MUTE else colour, bold = true, spacing = 240
+            )
+            val when_ = slots.str(if (before) "beforeWhen" else "afterWhen")
+            if (when_ != null) {
+                out += Label(x + 26, BODY_Y + 46, colW - 52, 18, listOf(DeckTheme.clip(when_, 34)), 13, DeckTheme.MUTE)
+            }
+
+            // The note's band is taken out before the rows are sized, not drawn over them
+            // afterwards: laid on top, it landed exactly on the first row's caption.
+            val noteH = if (slots.str("afterNote") != null) 46 else 0
+            val top = BODY_Y + 80
+            val rowH = (panelH - 80 - 20 - noteH) / rows.size
+            rows.forEachIndexed { i, row ->
+                val y = top + i * rowH
+                val value = DeckTheme.clip(row.str(if (before) "before" else "after").orEmpty(), Caps.DELTA_VALUE)
+                val label = DeckTheme.clip(row.str("label").orEmpty(), Caps.DELTA_LABEL)
+                val size = DeckTheme.fit(value, colW - 52, rowH - 26, listOf(40, 34, 28, 24), bold = true, linePct = 108)
+                out += Label(x + 26, y, colW - 52, rowH - 24, listOf(value), size,
+                    if (before) DeckTheme.DIM else DeckTheme.INK, bold = true, anchor = Anchor.BOTTOM, linePct = 108)
+                out += Label(x + 26, y + rowH - 22, colW - 52, 18, listOf(label), 13, DeckTheme.MUTE)
+            }
+
+            // What the period did, under the after figure only. It describes the change
+            // rather than being half of a comparison, so it belongs on one side.
+            val note = slots.str("afterNote")
+            if (!before && note != null) {
+                out += Label(x + 26, BODY_Y + panelH - noteH - 4, colW - 52, noteH,
+                    listOf(DeckTheme.clip(note, 76)), 13, colour, bold = true, linePct = 126,
+                    anchor = Anchor.MIDDLE)
+            }
+        }
+
+        // The arrow: a rule through the gutter with a disc on it, so the direction reads.
+        val midY = BODY_Y + panelH / 2
+        val gutter = MARGIN + colW
+        out += Box(gutter + 10, midY - 1, gap - 20, 2, DeckTheme.LINE)
+        out += Box(gutter + gap / 2 - 17, midY - 17, 34, 34, DeckTheme.PAPER, roundPct = 50, stroke = colour)
+        out += Label(gutter + gap / 2 - 17, midY - 17, 34, 34, listOf("\u203A"), 22, colour,
+            bold = true, align = Align.CENTER, anchor = Anchor.MIDDLE)
+
+        if (areas.isEmpty()) return title
+
+        // Where it landed. Counted from the changed paths, never described.
+        val areasY = BODY_Y + panelH + 30
+        out += Label(MARGIN, areasY, CONTENT_W, 18, listOf(slots.str("areasLabel") ?: "WHERE THE WORK LANDED"),
+            13, colour, bold = true, spacing = 240)
+
+        val cardY = areasY + 26
+        val cardH = BODY_B - cardY
+        val cardGap = 14
+        val cardW = (CONTENT_W - cardGap * (areas.size - 1)) / areas.size
+        areas.forEachIndexed { i, area ->
+            val x = MARGIN + i * (cardW + cardGap)
+            out += Box(x, cardY, cardW, cardH, DeckTheme.PAPER, roundPct = 6, stroke = DeckTheme.LINE)
+            val name = DeckTheme.clip(area.str("name").orEmpty(), Caps.AREA_NAME)
+            val count = area.str("detail").orEmpty()
+            val size = DeckTheme.fit(name, cardW - 28, 24, listOf(17, 15, 13, 12), bold = true, linePct = 112)
+            out += Label(x + 14, cardY + 14, cardW - 28, 24, listOf(name), size, DeckTheme.INK, bold = true, linePct = 112)
+            out += Label(x + 14, cardY + 40, cardW - 28, 18, listOf(count), 12, DeckTheme.MUTE)
         }
         return title
     }

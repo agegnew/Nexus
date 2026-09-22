@@ -43,12 +43,21 @@ object SlideLayout {
 
     /** The same name the film's scene has, because it is the same thing drawn twice. */
     const val PRODUCT_UI = "product-ui"
+
+    /**
+     * Where the period left the project, against where it found it.
+     *
+     * Only ever in an update deck, because a product deck has no "before": the project is
+     * simply what it is. It is the slide somebody asks for out loud after seeing that four
+     * thousand lines moved, because a number on its own does not say whether that is a lot.
+     */
+    const val BEFORE_AFTER = "before-after"
     const val GAPS = "gaps"
     const val CLOSING = "closing"
 
     val ALL = listOf(
         TITLE, AGENDA, PROBLEM, STATEMENT, CAPABILITY_GRID, ARCH_LAYERS,
-        FLOW, STATS, STACK, JOURNEY, PRODUCT_UI, GAPS, CLOSING
+        FLOW, STATS, STACK, JOURNEY, PRODUCT_UI, BEFORE_AFTER, GAPS, CLOSING
     )
 
     /** Layouts that assume the reader reads code, so never used in a stakeholder deck. */
@@ -66,7 +75,7 @@ object SlideLayout {
     val MAX_REPEATS: Map<String, Int> = mapOf(
         TITLE to 1, AGENDA to 1, CLOSING to 1, PROBLEM to 1,
         STATS to 1, GAPS to 1, JOURNEY to 1, ARCH_LAYERS to 1,
-        STACK to 1, PRODUCT_UI to 1, STATEMENT to 2, FLOW to 2, CAPABILITY_GRID to 2
+        STACK to 1, PRODUCT_UI to 1, BEFORE_AFTER to 1, STATEMENT to 2, FLOW to 2, CAPABILITY_GRID to 2
     )
 }
 
@@ -144,6 +153,12 @@ object Caps {
     const val UI_BRAND = 22
     const val UI_BRAND_SUB = 34
     const val UI_STAGE = 16
+
+    /** The before and after slide. Two columns of counted facts and a list of places. */
+    const val DELTA_LABEL = 26
+    const val DELTA_VALUE = 14
+    const val MAX_DELTA_ROWS = 4
+    const val AREA_NAME = 22
 
     const val MAX_SLIDES = 14
     const val MIN_SLIDES = 6

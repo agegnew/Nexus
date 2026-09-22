@@ -37,49 +37,43 @@
     <fieldset class="scope" id="scope">
       <legend class="scope__legend">What the film is about</legend>
 
-      <div class="scope__modes" role="radiogroup" aria-label="Reel subject">
-        <label class="scope__mode">
-          <input type="radio" name="reel-scope" value="launch" checked>
-          <span><strong>Launch video</strong><small>What the product is, from the whole codebase.</small></span>
-        </label>
-        <label class="scope__mode">
-          <input type="radio" name="reel-scope" value="recap">
-          <span><strong>Recap</strong><small>What was built in a period, from the commits in it.</small></span>
-        </label>
+      <!--
+        One question, not two. The whole project is simply the widest period, so a person
+        picks how far back to go once instead of first choosing a mode and then, in a
+        block that appears underneath, a range.
+      -->
+      <div class="scope__chips" id="scope-chips" role="group" aria-label="Period">
+        <button type="button" class="chipp" data-period="whole" aria-pressed="true">Whole project</button>
+        <button type="button" class="chipp" data-period="this-week" aria-pressed="false">This week</button>
+        <button type="button" class="chipp" data-period="last-week" aria-pressed="false">Last week</button>
+        <button type="button" class="chipp" data-period="this-month" aria-pressed="false">This month</button>
+        <button type="button" class="chipp" data-period="last-30" aria-pressed="false">Last 30 days</button>
+        <button type="button" class="chipp" data-period="custom" aria-pressed="false">Pick dates</button>
       </div>
 
-      <div class="scope__range" id="scope-range" hidden>
-        <label class="scope__field">
-          <span>Period</span>
-          <select id="scope-period">
-            <option value="this-week">This week</option>
-            <option value="last-week" selected>Last week</option>
-            <option value="this-month">This month</option>
-            <option value="last-month">Last month</option>
-            <option value="last-7">Last 7 days</option>
-            <option value="last-30">Last 30 days</option>
-            <option value="last-90">Last 90 days</option>
-            <option value="custom">Custom range</option>
-          </select>
-        </label>
+      <!-- The value the rest of the plugin reads. The chips above write to it. -->
+      <select id="scope-period" hidden>
+        <option value="whole" selected>whole</option>
+        <option value="this-week">this-week</option>
+        <option value="last-week">last-week</option>
+        <option value="this-month">this-month</option>
+        <option value="last-30">last-30</option>
+        <option value="custom">custom</option>
+      </select>
+      <input type="hidden" id="scope-from">
+      <input type="hidden" id="scope-to">
 
-        <label class="scope__field" id="scope-from-field" hidden>
-          <span>From</span>
-          <input type="date" id="scope-from">
-        </label>
+      <div class="scope__calendar" id="scope-calendar" hidden>
+        <div class="cals" id="scope-cal"></div>
+      </div>
 
-        <label class="scope__field" id="scope-to-field" hidden>
-          <span>To</span>
-          <input type="date" id="scope-to">
-        </label>
+      <p class="scope__dates" id="scope-dates"></p>
 
-        <span class="scope__dates" id="scope-dates"></span>
-
+      <div class="scope__filters" id="scope-filters" hidden>
         <label class="scope__field">
           <span>Area</span>
           <select id="scope-area"><option value="all">All</option></select>
         </label>
-
         <label class="scope__toggle"><input type="checkbox" id="scope-mine" checked> Only my commits</label>
         <label class="scope__toggle"><input type="checkbox" id="scope-uncommitted" checked> Include uncommitted</label>
       </div>

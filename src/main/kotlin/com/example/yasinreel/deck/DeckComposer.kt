@@ -80,6 +80,7 @@ object DeckComposer {
          */
         if (recap != null) {
             slides += periodSlide(recap, stakeholder)
+            beforeAfterSlide(recap, evidence, stakeholder)?.let { slides += it }
             // Raw commit subjects, for the audience that reads them daily. A stakeholder
             // gets the same period through the capabilities below, in product terms.
             if (!stakeholder) workSlide(recap)?.let { slides += it }
@@ -155,6 +156,23 @@ object DeckComposer {
         val storyboard = FallbackDirector.direct(evidence, audience, 60_000)
         val stakeholder = audience == Audience.STAKEHOLDER
         val slides = storyboard.scenes.mapNotNull { fromScene(it, evidence, audience) }.toMutableList()
+
+        /*
+         * The before and after, which the film has no equivalent of.
+         *
+         * A film is watched once and forward; a deck is read by somebody who will be asked
+         * "so what actually changed" and has to answer from what is on screen. It goes
+         * straight after the period's own numbers, which is the slide that prompts the
+         * question, and it is built here rather than converted from a scene because there
+         * is no scene to convert.
+         */
+        evidence.recap?.let { recap ->
+            beforeAfterSlide(recap, evidence, stakeholder)?.let { extra ->
+                val at = slides.indexOfFirst { it.layout == SlideLayout.STATS }.takeIf { it >= 0 }?.plus(1)
+                    ?: minOf(2, slides.size)
+                slides.add(at, extra)
+            }
+        }
 
         val agendaAt = minOf(1, slides.size)
         if (slides.size >= Caps.MIN_SLIDES - 1) {
@@ -439,6 +457,75 @@ object DeckComposer {
      * deck does not get this slide at all: a commit subject is written for the person who
      * will run `git log`, and the validator would strip most of them anyway.
      */
+    /**
+     * Where the period left the project, against where it found it.
+     *
+     * The slide somebody asks for out loud after seeing that four thousand lines moved,
+     * because a number on its own does not say whether that is a lot. Both audiences get
+     * it, worded differently: an engineer is shown lines and files, and the room is shown
+     * the size of the thing and how much of it is new, because "lines of code" is a
+     * measure of effort only to the people who write them.
+     *
+     * Null when the arithmetic would be a lie. The before is the project as it stands now
+     * with the period's own work taken back out, which is honest only if that work is
+     * actually in what was counted; with nothing added or removed there is no before to
+     * show and the slide is simply not built.
+     */
+    private fun count(value: Int): String = String.format(Locale.US, "%,d", value)
+
+    private fun beforeAfterSlide(recap: RecapFacts, evidence: Evidence, stakeholder: Boolean): Slide? {
+        if (recap.linesBefore <= 0 || (recap.linesAdded == 0 && recap.linesDeleted == 0)) return null
+        val after = evidence.stats.totalLines
+        if (after <= 0) return null
+
+        val rows = JsonArray()
+        rows.add(obj {
+            put("label", if (stakeholder) "Size of the product" else "Lines in the project")
+            put("before", count(recap.linesBefore))
+            put("after", count(after))
+        })
+        /*
+         * One comparison, not two.
+         *
+         * A second row was tried and there is nothing honest to put in it: lines added has
+         * no "before", and printing a placeholder under the left column left a stray mark
+         * on the slide that read as a rendering fault. What the period actually did goes
+         * underneath the after figure instead, where it is a description of the change
+         * rather than half of a comparison that does not exist.
+         */
+        val did = buildList {
+            add("+" + count(recap.linesAdded) + " written")
+            if (recap.linesDeleted > 0) add(count(recap.linesDeleted) + " taken out")
+            add(if (recap.filesTouched == 1) "1 file touched" else count(recap.filesTouched) + " files touched")
+        }.joinToString("  \u00b7  ")
+
+        val areas = JsonArray()
+        recap.areas.forEach { area ->
+            areas.add(obj {
+                put("name", area.name)
+                put("detail", if (area.files == 1) "1 file" else "${count(area.files)} files")
+            })
+        }
+
+        return slide(SlideLayout.BEFORE_AFTER, obj {
+            // Caps.EYEBROW is 28 characters and the header clips silently past it.
+            put("eyebrow", if (stakeholder) "Start and finish" else "Before and after")
+            put("heading", if (stakeholder) "What changed over the period" else "What moved in this period")
+            put("beforeWhen", readable(recap).substringBefore(" to "))
+            put("afterWhen", readable(recap).substringAfter(" to "))
+            put("rows", rows)
+            put("afterNote", did)
+            put("areasLabel", if (stakeholder) "WHERE THE WORK WENT" else "WHERE THE WORK LANDED")
+            put("areas", areas)
+        }, if (stakeholder) {
+            "The left is where the period started and the right is where it ended. " +
+                "Everything on this slide was counted from the work itself, not estimated."
+        } else {
+            "Before is the tree with this period's own diff taken back out of it, not a checkout of the old revision. " +
+                "The areas underneath are the top level folders the changed paths fall in."
+        })
+    }
+
     private fun workSlide(recap: RecapFacts): Slide? {
         val subjects = recap.subjects.filter { it.isNotBlank() }.take(Caps.MAX_CARDS)
         if (subjects.isEmpty()) return null

@@ -41,49 +41,43 @@
     <fieldset class="scope" id="scope">
       <legend class="scope__legend">What the deck is about</legend>
 
-      <div class="scope__modes" role="radiogroup" aria-label="Deck subject">
-        <label class="scope__mode">
-          <input type="radio" name="deck-scope" value="launch" checked>
-          <span><strong>The product</strong><small>What it is and what it does, from the whole codebase.</small></span>
-        </label>
-        <label class="scope__mode">
-          <input type="radio" name="deck-scope" value="recap">
-          <span><strong>Progress update</strong><small>What was built in a period, from the commits in it.</small></span>
-        </label>
+      <!--
+        One question, not two. The whole project is simply the widest period, so a person
+        picks how far back to go once instead of first choosing a mode and then, in a
+        block that appears underneath, a range.
+      -->
+      <div class="scope__chips" id="scope-chips" role="group" aria-label="Period">
+        <button type="button" class="chipp" data-period="whole" aria-pressed="true">Whole project</button>
+        <button type="button" class="chipp" data-period="this-week" aria-pressed="false">This week</button>
+        <button type="button" class="chipp" data-period="last-week" aria-pressed="false">Last week</button>
+        <button type="button" class="chipp" data-period="this-month" aria-pressed="false">This month</button>
+        <button type="button" class="chipp" data-period="last-30" aria-pressed="false">Last 30 days</button>
+        <button type="button" class="chipp" data-period="custom" aria-pressed="false">Pick dates</button>
       </div>
 
-      <div class="scope__range" id="scope-range" hidden>
-        <label class="scope__field">
-          <span>Period</span>
-          <select id="scope-period">
-            <option value="this-week">This week</option>
-            <option value="last-week" selected>Last week</option>
-            <option value="this-month">This month</option>
-            <option value="last-month">Last month</option>
-            <option value="last-7">Last 7 days</option>
-            <option value="last-30">Last 30 days</option>
-            <option value="last-90">Last 90 days</option>
-            <option value="custom">Custom range</option>
-          </select>
-        </label>
+      <!-- The value the rest of the plugin reads. The chips above write to it. -->
+      <select id="scope-period" hidden>
+        <option value="whole" selected>whole</option>
+        <option value="this-week">this-week</option>
+        <option value="last-week">last-week</option>
+        <option value="this-month">this-month</option>
+        <option value="last-30">last-30</option>
+        <option value="custom">custom</option>
+      </select>
+      <input type="hidden" id="scope-from">
+      <input type="hidden" id="scope-to">
 
-        <label class="scope__field" id="scope-from-field" hidden>
-          <span>From</span>
-          <input type="date" id="scope-from">
-        </label>
+      <div class="scope__calendar" id="scope-calendar" hidden>
+        <div class="cals" id="scope-cal"></div>
+      </div>
 
-        <label class="scope__field" id="scope-to-field" hidden>
-          <span>To</span>
-          <input type="date" id="scope-to">
-        </label>
+      <p class="scope__dates" id="scope-dates"></p>
 
-        <span class="scope__dates" id="scope-dates"></span>
-
+      <div class="scope__filters" id="scope-filters" hidden>
         <label class="scope__field">
           <span>Area</span>
           <select id="scope-area"><option value="all">All</option></select>
         </label>
-
         <label class="scope__toggle"><input type="checkbox" id="scope-mine" checked> Only my commits</label>
         <label class="scope__toggle"><input type="checkbox" id="scope-uncommitted" checked> Include uncommitted</label>
       </div>
@@ -108,6 +102,17 @@
     <p class="picker__foot" id="status">Waiting for the IDE.</p>
   </section>
 
+  <!--
+    A presenter, not a contact sheet.
+
+    Every slide used to be printed at once down a scrolling page, which answers "what is
+    in the deck" and nothing else. A deck is read one slide at a time by somebody standing
+    in front of a room, so that is what this shows: the current slide large, the rest in a
+    rail beside it, and the speaker notes underneath where the presenter needs them.
+
+    Everything here is drawn from the same positioned shapes the .pptx is written from, so
+    it cannot show a slide the file does not contain.
+  -->
   <section class="result" id="result" hidden aria-label="The deck">
     <div class="result__bar">
       <div class="result__meta">
@@ -115,17 +120,44 @@
         <span class="result__sub" id="result-sub"></span>
       </div>
       <div class="result__actions">
+        <button class="chip" id="notes-toggle" type="button" aria-pressed="true">Notes</button>
         <button class="chip chip--go" id="open" type="button">Open</button>
         <button class="chip" id="reveal" type="button">Show in Finder</button>
         <button class="chip" id="back" type="button">Back</button>
       </div>
     </div>
 
-    <!--
-      The preview is drawn from the same list of positioned shapes the .pptx is written
-      from, so it cannot show a slide the file does not contain.
-    -->
-    <div class="sheet" id="sheet"></div>
+    <div class="present" id="present">
+      <aside class="rail" id="rail" aria-label="Slides"></aside>
+
+      <div class="viewer">
+        <div class="viewer__stagewrap" id="stagewrap" tabindex="0" role="group"
+             aria-label="Current slide. Use the arrow keys to move between slides.">
+          <div class="viewer__frame" id="slide-frame">
+            <div class="viewer__stage" id="slide-stage"></div>
+          </div>
+        </div>
+
+        <div class="viewer__bar">
+          <button class="nav" id="prev" type="button" aria-label="Previous slide">&#8249;</button>
+          <span class="viewer__count"><strong id="slide-no">1</strong> / <span id="slide-total">1</span></span>
+          <button class="nav" id="next" type="button" aria-label="Next slide">&#8250;</button>
+          <span class="viewer__name" id="slide-name"></span>
+        </div>
+
+        <section class="notes" id="notes" aria-label="Speaker notes">
+          <div class="notes__head">
+            <div class="notes__tabs" role="tablist">
+              <button class="notes__tab" id="tab-one" type="button" role="tab" aria-selected="true">This slide</button>
+              <button class="notes__tab" id="tab-all" type="button" role="tab" aria-selected="false">All notes</button>
+            </div>
+            <span class="notes__hint">What you say while this slide is up</span>
+          </div>
+          <div class="notes__body" id="notes-one"></div>
+          <div class="notes__body notes__body--list" id="notes-all" hidden></div>
+        </section>
+      </div>
+    </div>
   </section>
 
 </main>
