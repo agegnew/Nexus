@@ -220,16 +220,16 @@ class CoverageReportSource : ExecutionSource {
         }
     }
 
-    private companion object {
-        val FILENAME = Regex("""filename="([^"]+)"""")
-        val LINE_HITS = Regex("""<line[^>]*number="(\d+)"[^>]*hits="(\d+)"""")
+    companion object {
+        private val FILENAME = Regex("""filename="([^"]+)"""")
+        private val LINE_HITS = Regex("""<line[^>]*number="(\d+)"[^>]*hits="(\d+)"""")
 
         /** Where test runners drop reports, in the order a human would look. */
-        val SEARCH_DIRS = listOf(
+        private val SEARCH_DIRS = listOf(
             "", "coverage", "backend", "backend/coverage", "frontend/coverage",
             "htmlcov", "build/reports/coverage", "target/site/cobertura", ".nexus",
         )
 
-        val REPORT_NAMES = listOf("coverage.xml", "cobertura.xml", "lcov.info", "coverage-final.info")
+        internal val REPORT_NAMES = listOf("coverage.xml", "cobertura.xml", "lcov.info", "coverage-final.info")
     }
 }

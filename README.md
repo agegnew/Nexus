@@ -7,6 +7,39 @@
 
 This repository implements an IntelliJ Platform plugin.
 
+## Trust tab
+
+Opens from the Nexus panel, next to Map, Reel and Deck. It shows the code in the open
+project that has **never been executed**, using the project's own coverage report.
+
+**How to read it**
+
+- The big number is the share of executable lines that no run has ever reached.
+- One bar per folder. A folder at 100% has never run at all.
+- One box per file. Area is lines of code, colour runs from green (ran) to red (never ran).
+  Hatched grey means **dead**: nothing imports the file and nothing has ever run it.
+- Double-click a box or a list row to open the file on its first never-run line.
+- Click a folder bar or box to narrow the list to that folder.
+
+**How to get data**
+
+Press **Run with coverage**. Nexus runs the project's coverage command in the Run tool
+window and redraws when it finishes. It guesses the command from the project (pytest with
+coverage.py, vitest, jest). To set it yourself, or when it cannot guess, put this at the
+project root:
+
+```json
+// .nexus/trust.json
+{ "command": "python -m coverage run -m pytest && python -m coverage xml" }
+```
+
+Any command that writes `coverage.xml` (Cobertura) or `lcov.info` works. The tab also
+redraws on its own whenever that file changes, so a run from a terminal or a report copied
+in from CI shows up too.
+
+**Paint in editor** tints the never-run lines in the code editor itself, with a stripe
+beside the scrollbar. **Only dead code** narrows everything to the deletable files.
+
 ## Demo Functionality
 
 The sample plugin adds a `My Tool Window` tool window with a simple functionality of shuffling a random number.

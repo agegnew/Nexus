@@ -1,11 +1,13 @@
 package com.example.trust
 
+import com.intellij.icons.AllIcons
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ModalityState
 import com.intellij.openapi.fileEditor.OpenFileDescriptor
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.wm.ToolWindow
@@ -15,6 +17,7 @@ import com.intellij.ui.JBColor
 import com.intellij.ui.OnePixelSplitter
 import com.intellij.ui.SimpleTextAttributes
 import com.intellij.ui.components.ActionLink
+import com.intellij.ui.components.JBCheckBox
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBList
 import com.intellij.ui.components.JBScrollPane
@@ -24,6 +27,7 @@ import com.intellij.util.ui.JBFont
 import com.intellij.util.ui.JBUI
 import com.intellij.util.ui.UIUtil
 import java.awt.BorderLayout
+import java.awt.CardLayout
 import java.awt.FlowLayout
 import java.awt.Graphics
 import java.awt.event.MouseAdapter
@@ -34,6 +38,7 @@ import javax.swing.JButton
 import javax.swing.JComponent
 import javax.swing.JList
 import javax.swing.JPanel
+import javax.swing.SwingConstants
 
 /**
  * The Trust tab: the whole project's unproven code as one picture, then as a list to act on.
@@ -42,6 +47,12 @@ import javax.swing.JPanel
  * question you ask before opening anything: "where in this project am I building on code that
  * has never run". The treemap answers it without reading, the folder bars turn it into a
  * sentence, and the list is what you click to get your cursor onto the problem.
+ *
+ * One button. Everything on this tab comes from a coverage report, and the button is how
+ * you get one. The first version had four buttons whose labels changed as you pressed them,
+ * and the people it was shown to could not say what any of them did. Now the only thing
+ * that looks like a button does the one thing there is to do, and the two switches are
+ * checkboxes, whose state can be read without pressing them.
  */
 class TrustToolWindowFactory : ToolWindowFactory, DumbAware {
 
@@ -69,25 +80,22 @@ private class TrustPanel(private val project: Project) : JPanel(BorderLayout()),
     private val listHeading = JBLabel()
     private val undrawn = JBLabel()
 
-    private val paintButton = JButton()
-    private val deadButton = JButton()
-    private val groupButton = JButton()
+    private val runButton = JButton("Run with coverage", AllIcons.Actions.Execute)
+    private val paintBox = JBCheckBox("Paint in editor")
+    private val deadBox = JBCheckBox("Only dead code")
 
-    /**
-     * The active filters, in words, with a way out. Shown only while something is filtered.
-     *
-     * A toggle button's pressed state is a few shades of grey apart from its resting state
-     * and nobody can read that across a room. A sentence saying "showing dead code only" can
-     * be read from anywhere, and it also tells you which of three things you are looking at
-     * when the picture, the bars and the list are all narrowed differently.
-     */
+    /** Says which folder the list is narrowed to, with a way out. Hidden when it is not. */
     private val filterBar = JPanel(FlowLayout(FlowLayout.LEFT, 6, 0)).apply { isOpaque = false }
     private val filterText = JBLabel()
+
+    private val cards = CardLayout()
+    private val body = JPanel(cards)
+    private val emptyMessage = JBLabel()
 
     /** Everything known, dead marks included once the background pass has finished. */
     private var known: List<FileTrust> = emptyList()
     private var selected: LayerSummary? = null
-    private var deadOnly = false
+    private var running = false
 
     private val list = JBList(model).apply {
         emptyText.text = "Nothing unproven here"
@@ -146,7 +154,7 @@ private class TrustPanel(private val project: Project) : JPanel(BorderLayout()),
         })
 
         // A finished run is the moment the answer can change, so the tab listens for it rather
-        // than making the user press Refresh to find out something already happened.
+        // than making the user press anything to find out something already happened.
         project.messageBus.connect(this).subscribe(
             TrustListener.TOPIC,
             object : TrustListener {
@@ -179,42 +187,29 @@ private class TrustPanel(private val project: Project) : JPanel(BorderLayout()),
             border = JBUI.Borders.emptyBottom(8)
         }
 
-        paintButton.addActionListener {
-            TrustWidget.toggle(project)
-            updateButtons()
+        runButton.addActionListener { runCoverage() }
+        paintBox.addActionListener {
+            // The checkbox is the truth; the service follows it.
+            if (paintBox.isSelected != TrustService.getInstance(project).enabled) TrustWidget.toggle(project)
         }
-        deadButton.addActionListener {
-            deadOnly = !deadOnly
-            render(animate = false)
-        }
-        groupButton.addActionListener {
-            treemap.grouped = !treemap.grouped
-            updateButtons()
-        }
+        deadBox.addActionListener { render(animate = false) }
 
-        // Every button names the thing pressing it will do, never the state it is in. The
-        // state is written out in the filter line where it can actually be read.
-        val buttons = JPanel(FlowLayout(FlowLayout.LEFT, 6, 0)).apply {
+        val controls = JPanel(FlowLayout(FlowLayout.LEFT, 10, 0)).apply {
             isOpaque = false
-            add(paintButton)
-            add(JButton("Refresh").apply {
-                // Goes through the service so the report, the dead marks and every open editor
-                // all move together. A local reload would redraw this tab around stale numbers.
-                addActionListener { TrustService.getInstance(project).refresh() }
-            })
-            add(deadButton)
-            add(groupButton)
+            add(runButton)
+            add(paintBox)
+            add(deadBox)
         }
 
         filterText.foreground = UIUtil.getLabelForeground()
         filterBar.add(filterText)
-        filterBar.add(ActionLink("show everything") { clearFilters() })
+        filterBar.add(ActionLink("show all folders") { selectLayer(null) })
         filterBar.isVisible = false
 
         val toolbar = JPanel().apply {
             layout = BoxLayout(this, BoxLayout.Y_AXIS)
             isOpaque = false
-            add(buttons)
+            add(controls)
             add(filterBar.apply { border = JBUI.Borders.emptyTop(6) })
             border = JBUI.Borders.emptyBottom(10)
         }
@@ -227,7 +222,7 @@ private class TrustPanel(private val project: Project) : JPanel(BorderLayout()),
         }
     }
 
-    private fun buildBody(): OnePixelSplitter {
+    private fun buildBody(): JPanel {
         val picture = JPanel(BorderLayout()).apply {
             isOpaque = false
             border = JBUI.Borders.emptyTop(10)
@@ -247,10 +242,23 @@ private class TrustPanel(private val project: Project) : JPanel(BorderLayout()),
 
         // Adjustable, because how much of each you want depends on whether you are showing
         // the project to somebody or working through the list yourself.
-        return OnePixelSplitter(true, 0.6f).apply {
+        val data = OnePixelSplitter(true, 0.6f).apply {
             firstComponent = picture
             secondComponent = below
         }
+
+        // Shown instead of an empty picture, because an empty picture explains nothing and a
+        // sentence with the next step in it does.
+        emptyMessage.horizontalAlignment = SwingConstants.CENTER
+        emptyMessage.foreground = UIUtil.getInactiveTextColor()
+
+        body.isOpaque = false
+        body.add(data, CARD_DATA)
+        body.add(JPanel(BorderLayout()).apply {
+            isOpaque = false
+            add(emptyMessage, BorderLayout.CENTER)
+        }, CARD_EMPTY)
+        return body
     }
 
     private fun buildLegend(): JPanel {
@@ -261,11 +269,11 @@ private class TrustPanel(private val project: Project) : JPanel(BorderLayout()),
 
         val row = JPanel(FlowLayout(FlowLayout.LEFT, 10, 4)).apply {
             isOpaque = false
-            add(caption("area = size of file"))
-            add(caption("proven"))
+            add(caption("one box per file, area = lines of code"))
+            add(caption("ran"))
             add(RampSwatch())
-            add(caption("never run"))
-            add(caption("hatched = dead, nothing imports it"))
+            add(caption("never ran"))
+            add(caption("hatched = dead: nothing imports it, nothing ran it"))
         }
 
         undrawn.foreground = UIUtil.getInactiveTextColor()
@@ -294,20 +302,83 @@ private class TrustPanel(private val project: Project) : JPanel(BorderLayout()),
             val detailed = runCatching { service.allKnownDetailed() }.getOrDefault(emptyMap())
             val described = runCatching { service.describeSource() }.getOrNull()
             val placeholder = runCatching { service.isPlaceholder() }.getOrDefault(false)
+            val command = runCatching { TrustRunner.commandFor(project) }.getOrNull()
 
             ApplicationManager.getApplication().invokeLater({
                 if (project.isDisposed) return@invokeLater
                 known = detailed.values.toList()
                 provenance.text = when (described) {
-                    null -> "No coverage report found yet. Run your tests with coverage and this fills in."
+                    null -> "No coverage report found in this project yet."
                     else -> if (placeholder) "$described  (not a real run yet)" else described
                 }
+                describeRunButton(command)
                 render(animate)
             }, ModalityState.any(), project.disposed)
         }
     }
 
+    private fun describeRunButton(command: CoverageCommand?) {
+        if (running) return
+        runButton.isEnabled = true
+        if (command == null) {
+            runButton.text = "Set up coverage…"
+            runButton.toolTipText = "No coverage command is known for this project. Click to see how to set one."
+        } else {
+            runButton.text = "Run with coverage"
+            runButton.toolTipText = "<html>Runs in the Run tool window, then redraws this tab:<br>" +
+                "<code>${command.command}</code><br><i>${command.origin}</i></html>"
+        }
+        emptyMessage.text = if (command == null) {
+            "<html><div style='text-align:center'><b>Nothing measured yet.</b><br><br>" +
+                "This tab paints the code that has never been executed.<br>" +
+                "It needs one run of the project with coverage on, and it does not know the command for this project.<br>" +
+                "Press <b>Set up coverage…</b> above to see how to tell it.</div></html>"
+        } else {
+            "<html><div style='text-align:center'><b>Nothing measured yet.</b><br><br>" +
+                "This tab paints the code that has never been executed.<br>" +
+                "Press <b>Run with coverage</b> above. It runs<br><code>${command.command}</code><br>" +
+                "in the Run tool window, and this fills in when it finishes.</div></html>"
+        }
+    }
+
+    private fun runCoverage() {
+        val command = TrustRunner.commandFor(project)
+        if (command == null) {
+            Messages.showInfoMessage(
+                project,
+                "Nexus could not guess how to run this project with coverage.\n\n" +
+                    "Tell it, in ${FixtureExecutionSource.FIXTURE_PATH} at the project root:\n\n" +
+                    "{ \"command\": \"python -m coverage run -m pytest && python -m coverage xml\" }\n\n" +
+                    "Any command that writes coverage.xml (Cobertura) or lcov.info will do. " +
+                    "The tab also redraws on its own whenever that file changes, so running it in a terminal works too.",
+                "Set Up Coverage",
+            )
+            return
+        }
+        running = true
+        runButton.isEnabled = false
+        runButton.text = "Running…"
+        TrustRunner.run(project, command) {
+            running = false
+            describeRunButton(command)
+        }
+    }
+
     private fun render(animate: Boolean) {
+        paintBox.isSelected = TrustService.getInstance(project).enabled
+
+        if (known.isEmpty()) {
+            heroNumber.text = "—"
+            heroNumber.foreground = UIUtil.getInactiveTextColor()
+            heroSaid.text = "No execution data for this project"
+            heroSub.text = "Nothing here has been measured yet"
+            strip.setData(emptyList())
+            cards.show(body, CARD_EMPTY)
+            return
+        }
+        cards.show(body, CARD_DATA)
+
+        val deadOnly = deadBox.isSelected
         val visible = if (deadOnly) known.filter { it.isDead } else known
         // Named against everything known, so a folder is called the same thing in every mode.
         val layers = TrustLayers.of(visible, namingBasis = known)
@@ -321,47 +392,36 @@ private class TrustPanel(private val project: Project) : JPanel(BorderLayout()),
         val dead = known.count { it.isDead }
         val unproven = known.count { !it.isClean }
 
-        when {
-            known.isEmpty() -> {
-                heroNumber.text = "—"
-                heroNumber.foreground = UIUtil.getInactiveTextColor()
-                heroSaid.text = "No execution data for this project"
-                heroSub.text = "Run the tests with coverage once and this fills in"
+        if (deadOnly) {
+            // Dead code is never executed by definition, so a percentage here would be 100%
+            // every time and say nothing. The size of the pile is the information.
+            heroNumber.text = "%,d".format(never)
+            heroNumber.foreground = DEAD_TEXT
+            heroSaid.text = if (never == 1) "line of dead code" else "lines of dead code"
+            heroSub.text = "$dead ${plural(dead, "file")} · nothing imports them and nothing has ever run them"
+        } else {
+            heroNumber.text = "$percent%"
+            heroNumber.foreground = TrustColors.ramp(percent.toDouble())
+            heroSaid.text = when {
+                percent > 60 -> "of this codebase has never executed"
+                percent > 25 -> "of this codebase still has never executed"
+                percent > 0 -> "left, and it is mostly edge cases"
+                else -> "everything known here has run at least once"
             }
-
-            deadOnly -> {
-                // Dead code is never executed by definition, so a percentage here would be
-                // 100% every time and say nothing. The size of the pile is the information.
-                heroNumber.text = "%,d".format(never)
-                heroNumber.foreground = DEAD_TEXT
-                heroSaid.text = if (never == 1) "line of dead code" else "lines of dead code"
-                heroSub.text = "$dead ${plural(dead, "file")} · nothing imports them and nothing has ever run them"
-            }
-
-            else -> {
-                heroNumber.text = "$percent%"
-                heroNumber.foreground = TrustColors.ramp(percent.toDouble())
-                heroSaid.text = when {
-                    percent > 60 -> "of this codebase has never executed"
-                    percent > 25 -> "of this codebase still has never executed"
-                    percent > 0 -> "left, and it is mostly edge cases"
-                    else -> "everything known here has run at least once"
-                }
-                // One sentence that ties the three counts together, because "48 files" up
-                // here and "34 files" in the list with nothing between them read as a bug.
-                heroSub.text = buildString {
-                    append("%,d of %,d lines never run".format(never, total))
-                    append(" · $unproven of ${known.size} files affected")
-                    if (dead > 0) append(" · $dead dead")
-                }
+            // One sentence that ties the three counts together, because "40 files" up here
+            // and "34 files" in the list with nothing between them read as a bug.
+            heroSub.text = buildString {
+                append("%,d of %,d lines never run".format(never, total))
+                append(" · $unproven of ${known.size} files affected")
+                if (dead > 0) append(" · $dead dead")
             }
         }
 
         renderList()
-        updateButtons()
     }
 
     private fun renderList() {
+        val deadOnly = deadBox.isSelected
         val base = if (deadOnly) known.filter { it.isDead } else known
         val folder = selected?.folder
         val rows = base
@@ -379,12 +439,8 @@ private class TrustPanel(private val project: Project) : JPanel(BorderLayout()),
             else -> "Files with never-run code (${rows.size})"
         }
 
-        val parts = buildList {
-            if (deadOnly) add("dead code only")
-            if (folder != null) add("list narrowed to $folder")
-        }
-        filterText.text = if (parts.isEmpty()) "" else "Showing ${parts.joinToString(", ")}."
-        filterBar.isVisible = parts.isNotEmpty()
+        filterText.text = if (folder == null) "" else "Narrowed to $folder."
+        filterBar.isVisible = folder != null
         filterBar.revalidate()
     }
 
@@ -395,24 +451,12 @@ private class TrustPanel(private val project: Project) : JPanel(BorderLayout()),
         renderList()
     }
 
-    private fun clearFilters() {
-        deadOnly = false
-        selectLayer(null)
-        render(animate = false)
-    }
-
     private fun showUndrawn(layers: List<LayerSummary>) {
         undrawn.isVisible = layers.isNotEmpty()
         if (layers.isEmpty()) return
         val names = layers.joinToString(", ") { "${it.name} (${it.totalLines} ${plural(it.totalLines, "line")})" }
-        undrawn.text = "Too small to draw to scale: $names. The bars above still count them."
+        undrawn.text = "Not drawn, too small: $names"
         undrawn.revalidate()
-    }
-
-    private fun updateButtons() {
-        paintButton.text = if (TrustService.getInstance(project).enabled) "Hide paint" else "Paint in editor"
-        deadButton.text = if (deadOnly) "Show everything" else "Dead code only"
-        groupButton.text = if (treemap.grouped) "Flat view" else "Group by folder"
     }
 
     /** Opens the file at the first line nothing has ever run, which is the line worth seeing. */
@@ -441,6 +485,9 @@ private class TrustPanel(private val project: Project) : JPanel(BorderLayout()),
     }
 
     private companion object {
+        const val CARD_DATA = "data"
+        const val CARD_EMPTY = "empty"
+
         val DEAD_TAG = SimpleTextAttributes(
             SimpleTextAttributes.STYLE_SMALLER or SimpleTextAttributes.STYLE_BOLD,
             JBColor(java.awt.Color(0x6A6A76), java.awt.Color(0xB9, 0xB9, 0xC6)),

@@ -58,15 +58,6 @@ class TrustTreemap : JComponent() {
             repaint()
         }
 
-    /** Folder boxes with headers, or every file in one flat field. */
-    var grouped: Boolean = true
-        set(value) {
-            if (field == value) return
-            field = value
-            laidOutFor = Dimension(0, 0)
-            repaint()
-        }
-
     private var layers: List<LayerSummary> = emptyList()
     private var groups: List<Tile<LayerSummary>> = emptyList()
     private var cells: List<Cell> = emptyList()
@@ -188,31 +179,22 @@ class TrustTreemap : JComponent() {
     private fun relayout() {
         val bounds = TreemapRect(0.0, 0.0, width.toDouble(), height.toDouble())
 
-        if (grouped) {
-            groups = Squarify.layout(layers, { it.totalLines.toDouble() }, bounds)
-            cells = groups.flatMap { group ->
-                // Room for the folder name across the top of its box.
-                val inner = TreemapRect(
-                    group.rect.x + 1, group.rect.y + HEADER, group.rect.w - 2,
-                    (group.rect.h - HEADER - 1).coerceAtLeast(1.0),
-                )
-                Squarify.layout(group.value.files, { it.totalLines.toDouble() }, inner)
-                    .map { Cell(it.value, it.rect, group.value) }
-            }
-        } else {
-            groups = emptyList()
-            val layerOf = layers.flatMap { layer -> layer.files.map { it.path to layer } }.toMap()
-            val files = layers.flatMap { it.files }
-            cells = Squarify.layout(files, { it.totalLines.toDouble() }, bounds)
-                .map { Cell(it.value, it.rect, layerOf.getValue(it.value.path)) }
+        groups = Squarify.layout(layers, { it.totalLines.toDouble() }, bounds)
+        cells = groups.flatMap { group ->
+            // Room for the folder name across the top of its box.
+            val inner = TreemapRect(
+                group.rect.x + 1, group.rect.y + HEADER, group.rect.w - 2,
+                (group.rect.h - HEADER - 1).coerceAtLeast(1.0),
+            )
+            Squarify.layout(group.value.files, { it.totalLines.toDouble() }, inner)
+                .map { Cell(it.value, it.rect, group.value) }
         }
         laidOutFor = Dimension(width, height)
 
-        val drawn = if (grouped) {
-            groups.filter { it.rect.w >= MIN_VISIBLE && it.rect.h >= MIN_VISIBLE }.map { it.value.folder }.toSet()
-        } else {
-            cells.filter { it.rect.w >= MIN_VISIBLE && it.rect.h >= MIN_VISIBLE }.map { it.layer.folder }.toSet()
-        }
+        val drawn = groups
+            .filter { it.rect.w >= MIN_VISIBLE && it.rect.h >= MIN_VISIBLE }
+            .map { it.value.folder }
+            .toSet()
         val undrawn = layers.filter { it.folder !in drawn }
         // Deferred: this runs inside paint, and a listener that revalidates a label mid-paint
         // would be asking Swing to lay out while it is drawing.
@@ -328,8 +310,11 @@ class TrustTreemap : JComponent() {
         if (rect.h < HEADER || rect.w < 30) return
 
         val dimmed = selectedLayer != null && selectedLayer != group.value.folder
-        g2.color = GROUP_EDGE
+        val chosen = selectedLayer == group.value.folder
+        g2.color = if (chosen) SELECTED_EDGE else GROUP_EDGE
+        g2.stroke = if (chosen) BasicStroke(2f) else SOLID
         g2.drawRect(rect.x.roundToInt(), rect.y.roundToInt(), rect.w.roundToInt() - 1, rect.h.roundToInt() - 1)
+        g2.stroke = SOLID
 
         g2.font = UIUtil.getLabelFont().deriveFont(Font.BOLD, JBUI.scaleFontSize(10f).toFloat())
         val metrics = g2.fontMetrics
@@ -372,11 +357,19 @@ class TrustTreemap : JComponent() {
         val DEAD = JBColor(Color(0x9A9AA4), Color(0x4A, 0x4A, 0x52))
         val DEAD_EDGE = JBColor(Color(0x6A6A76), Color(0x8A, 0x8A, 0x96))
 
-        /** Pushed towards the background, so a filtered folder recedes without vanishing. */
-        fun fade(color: Color) = Color(
-            (color.red * 0.38 + 33 * 0.62).roundToInt(),
-            (color.green * 0.38 + 34 * 0.62).roundToInt(),
-            (color.blue * 0.38 + 38 * 0.62).roundToInt(),
-        )
+        val SELECTED_EDGE = JBColor(Color(0x2F2F33), Color(0xE6, 0xE8, 0xEC))
+
+        /**
+         * Desaturated and darkened, so an unselected folder recedes without vanishing.
+         * Towards grey rather than towards the background: dimming a red by mixing in the
+         * dark background leaves a dark red, and a screen of dark reds and dark ambers is
+         * mud. Grey steps aside and lets the chosen folder be the only colour on screen.
+         */
+        fun fade(color: Color): Color {
+            val luminance = 0.299 * color.red + 0.587 * color.green + 0.114 * color.blue
+            val grey = luminance * 0.55 + 40 * 0.45
+            fun mix(channel: Int) = (channel * 0.15 + grey * 0.85).roundToInt().coerceIn(0, 255)
+            return Color(mix(color.red), mix(color.green), mix(color.blue))
+        }
     }
 }

@@ -47,6 +47,13 @@
 
     </extensions>
 
+    <applicationListeners>
+        <!-- A coverage report changing on disk, from any source, redraws the trust light. -->
+        <listener
+                class="com.example.trust.TrustReportWatcher"
+                topic="com.intellij.openapi.vfs.newvfs.BulkFileListener"/>
+    </applicationListeners>
+
     <projectListeners>
         <!-- Repaints the wash when a file is opened or brought to the front. Stateless, as
              declarative listeners must be: the state is in the TrustService. -->
