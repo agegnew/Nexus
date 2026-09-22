@@ -183,432 +183,233 @@
   min-height: 0;
 }
 
+/* The architecture view is a light diagram canvas, deliberately unlike the
+   dark code tree: symbols carry the meaning, borders stay out of the way. */
+
+/* Architecture view. Same dark surface as the rest of the panel; what sets it
+   apart from the code tree is the symbols, the grouping and the arrows, not a
+   different palette. */
+
 .architecture-workspace {
+  --arch-panel: oklch(19% 0.013 185 / 0.72);
+  --arch-line: oklch(29% 0.014 185);
+  --arch-edge: oklch(62% 0.015 185);
+
   container-type: inline-size;
   position: relative;
   min-height: 0;
-  overflow: hidden;
-  background-color: oklch(13.5% 0.012 185);
-  background-image:
-    linear-gradient(color-mix(in oklch, var(--border-subtle) 36%, transparent) 1px, transparent 1px),
-    linear-gradient(90deg, color-mix(in oklch, var(--border-subtle) 36%, transparent) 1px, transparent 1px);
-  background-size: 32px 32px;
+  background: var(--surface-base);
 }
 
-.architecture-scroll {
+.architecture-workspace .react-flow__node { cursor: default; }
+
+/* --- project boundary ---------------------------------------------------- */
+
+.arch-boundary {
+  position: relative;
   width: 100%;
   height: 100%;
-  overflow: auto;
   box-sizing: border-box;
-  padding: 104px clamp(40px, 6vw, 96px) 96px;
-  scrollbar-color: var(--border-subtle) transparent;
+  border: 1px dashed color-mix(in oklch, var(--frontend) 40%, var(--border-subtle));
+  border-radius: 8px;
 }
 
-.architecture-diagram {
-  min-width: 820px;
-  min-height: 100%;
-  transition: width 180ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.architecture-diagram svg {
-  display: block;
-  width: 100%;
-  height: auto;
-  min-height: 520px;
-  margin: 0 auto;
-  filter: drop-shadow(0 24px 48px oklch(5% 0.01 185 / 0.28));
-}
-
-.architecture-diagram .cluster rect {
-  fill: oklch(17% 0.012 185 / 0.82) !important;
-  stroke: oklch(38% 0.02 185) !important;
-  stroke-width: 1px !important;
-  rx: 8px;
-  ry: 8px;
-}
-
-.architecture-diagram .cluster .cluster rect {
-  fill: oklch(20% 0.014 185 / 0.74) !important;
-  stroke: oklch(43% 0.02 185) !important;
-  stroke-dasharray: 4 4;
-}
-
-.architecture-diagram .cluster-label text {
-  fill: var(--text-primary) !important;
-  font-size: 13px !important;
-  font-weight: 700 !important;
-  letter-spacing: 0.015em;
-}
-
-.architecture-diagram .nodeLabel {
-  font-weight: 620;
-  line-height: 1.5;
-}
-
-.architecture-diagram .flowchart-link {
-  stroke-width: 1.7px;
-}
-
-.architecture-diagram marker path {
-  fill: var(--text-secondary) !important;
-  stroke: var(--text-secondary) !important;
-}
-
-.architecture-diagram .edgeLabel text {
-  fill: var(--text-primary) !important;
-  font-size: 12px !important;
-  font-weight: 560 !important;
-}
-
-.architecture-diagram .edgeLabel rect {
-  fill: oklch(13.5% 0.012 185) !important;
-  opacity: 0.94 !important;
-  rx: 4px;
-  ry: 4px;
-}
-
-.architecture-heading {
+.arch-boundary__label {
   position: absolute;
-  z-index: 3;
-  top: var(--space-lg);
-  left: var(--space-lg);
+  right: 14px;
+  bottom: -8px;
+  padding: 0 8px;
+  background: var(--surface-base);
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+/* --- grouping panels ----------------------------------------------------- */
+
+.arch-group {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  padding: 0 var(--space-lg);
+  border: 1px solid var(--arch-line);
+  border-radius: 6px;
+  background: var(--arch-panel);
+}
+
+.arch-group--frontend { border-color: color-mix(in oklch, var(--frontend) 26%, var(--arch-line)); }
+.arch-group--backend { border-color: color-mix(in oklch, var(--backend) 26%, var(--arch-line)); }
+.arch-group--unmatched { border-color: color-mix(in oklch, var(--unmatched) 30%, var(--arch-line)); }
+
+.arch-group__header {
+  display: flex;
+  height: 52px;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.arch-group__icon { width: 22px; height: 22px; flex: 0 0 auto; }
+
+.arch-group__header strong {
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  font-weight: 620;
+  letter-spacing: -0.005em;
+}
+
+.arch-group__header small {
+  margin-left: auto;
+  color: var(--text-muted);
+  font-size: 0.6875rem;
+}
+
+.arch-group__empty {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+}
+
+/* --- icon figures -------------------------------------------------------- */
+
+.arch-figure {
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: var(--space-sm);
+  width: 100%;
+  height: 100%;
+  margin: 0;
+}
+
+/* No card border here: the group panel already does the containing, and
+   boxing each row is what made this read as the code tree again. */
+.arch-figure--row {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  justify-items: start;
+  padding: 0 var(--space-xs);
+}
+
+.arch-figure__icon { width: 40px; height: 40px; flex: 0 0 auto; }
+.arch-figure--row .arch-figure__icon { width: 30px; height: 30px; }
+
+.arch-figure figcaption {
   display: grid;
   gap: 2px;
-  padding: var(--space-sm) var(--space-md);
-  border: 1px solid var(--border-subtle);
-  border-radius: 6px;
-  background: oklch(18% 0.012 185 / 0.94);
-  box-shadow: 0 10px 28px oklch(6% 0.01 185 / 0.28);
+  width: 100%;
+  min-width: 0;
+  text-align: center;
 }
 
-.architecture-heading span {
-  color: var(--project);
-  font-size: 0.625rem;
-  font-weight: 720;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-}
+.arch-figure--row figcaption { text-align: left; }
 
-.architecture-heading strong {
+.arch-figure figcaption strong {
+  overflow: hidden;
+  color: var(--text-primary);
   font-size: 0.8125rem;
   font-weight: 620;
-}
-
-.architecture-toolbar {
-  position: absolute;
-  z-index: 3;
-  top: var(--space-lg);
-  right: var(--space-lg);
-  display: flex;
-  overflow: hidden;
-  border: 1px solid var(--border-subtle);
-  border-radius: 6px;
-  background: oklch(18% 0.012 185 / 0.94);
-  box-shadow: 0 10px 28px oklch(6% 0.01 185 / 0.28);
-}
-
-.architecture-toolbar button {
-  min-width: 34px;
-  height: 32px;
-  padding: 0 var(--space-sm);
-  border: 0;
-  border-right: 1px solid var(--border-subtle);
-  color: var(--text-primary);
-  background: transparent;
-  cursor: pointer;
-  font-size: 0.75rem;
-}
-
-.architecture-toolbar button:last-child { border-right: 0; }
-.architecture-toolbar button:hover { background: var(--surface-hover); }
-.architecture-toolbar button:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
-
-.architecture-key {
-  position: absolute;
-  left: 50%;
-  bottom: var(--space-lg);
-  display: flex;
-  align-items: center;
-  gap: var(--space-lg);
-  padding: var(--space-sm) var(--space-md);
-  border: 1px solid var(--border-subtle);
-  border-radius: 6px;
-  color: var(--text-secondary);
-  background: oklch(18% 0.012 185 / 0.94);
-  box-shadow: 0 10px 28px oklch(6% 0.01 185 / 0.28);
-  font-size: 0.6875rem;
-  transform: translateX(-50%);
-}
-
-.architecture-key span { display: inline-flex; align-items: center; gap: 6px; }
-.architecture-key i { width: 8px; height: 8px; border-radius: 2px; }
-.architecture-key__frontend { background: var(--frontend); }
-.architecture-key__api { background: var(--project); }
-.architecture-key__backend { background: var(--backend); }
-.architecture-key__unresolved { background: var(--unmatched); }
-
-.architecture-error {
-  display: grid;
-  max-width: 520px;
-  gap: var(--space-sm);
-  margin: 10vh auto 0;
-  padding: var(--space-xl);
-  border: 1px solid color-mix(in oklch, var(--unmatched) 55%, var(--border-subtle));
-  border-radius: 5px;
-  color: var(--text-primary);
-  background: var(--surface-raised);
-}
-
-.architecture-error span { color: var(--text-secondary); font-size: 0.75rem; line-height: 1.6; }
-
-@container (max-width: 720px) {
-  .architecture-scroll { padding: 104px 32px 88px; }
-  .architecture-heading strong { display: none; }
-  .architecture-key { display: none; }
-}
-
-.architecture-scroll {
-  display: grid;
-  padding: 88px 32px 80px;
-  place-items: center;
-}
-
-.architecture-map-frame {
-  position: relative;
-  flex: 0 0 auto;
-}
-
-.architecture-map {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 1000px;
-  height: 620px;
-  transform-origin: top left;
-}
-
-.architecture-boundary {
-  position: absolute;
-  z-index: 0;
-  top: 150px;
-  left: 30px;
-  width: 940px;
-  height: 420px;
-  box-sizing: border-box;
-  border: 1px solid oklch(46% 0.025 185);
-  border-radius: 10px;
-  background: oklch(16.5% 0.013 185 / 0.74);
-}
-
-.architecture-boundary__label {
-  position: absolute;
-  top: -14px;
-  left: 18px;
-  padding: 4px 9px;
-  color: var(--text-primary);
-  background: oklch(13.5% 0.012 185);
-  font-size: 12px;
-  font-weight: 680;
-  letter-spacing: 0.015em;
-}
-
-.architecture-zone {
-  position: absolute;
-  z-index: 1;
-  top: 190px;
-  width: 250px;
-  height: 330px;
-  box-sizing: border-box;
-  border: 1px solid oklch(37% 0.018 185);
-  border-radius: 7px;
-  background: oklch(19% 0.014 185 / 0.82);
-}
-
-.architecture-zone--client { left: 50px; }
-.architecture-zone--interface { left: 375px; }
-.architecture-zone--services { left: 700px; }
-
-.architecture-zone header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 14px 16px;
-  border-bottom: 1px solid oklch(34% 0.016 185);
-}
-
-.architecture-zone header > span {
-  color: var(--text-muted);
-  font-family: var(--font-code);
-  font-size: 10px;
-}
-
-.architecture-zone header div {
-  display: grid;
-  gap: 2px;
-}
-
-.architecture-zone header strong {
-  font-size: 13px;
-  font-weight: 680;
-}
-
-.architecture-zone header small {
-  color: var(--text-muted);
-  font-size: 10px;
-}
-
-.architecture-component,
-.architecture-external {
-  position: absolute;
-  z-index: 4;
-  display: grid;
-  box-sizing: border-box;
-  align-content: center;
-  gap: 3px;
-  min-height: 78px;
-  padding: 12px 16px;
-  border: 2px solid;
-  color: var(--text-primary);
-  background: oklch(22% 0.018 185);
-  box-shadow: 0 12px 24px oklch(7% 0.01 185 / 0.32);
-  text-align: left;
-}
-
-.architecture-component strong,
-.architecture-external strong {
-  overflow: hidden;
-  font-size: 15px;
-  font-weight: 700;
-  line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.architecture-component small,
-.architecture-external small {
-  color: var(--text-secondary);
-  font-size: 11px;
+.arch-figure figcaption small {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-family: var(--font-code);
+  font-size: 0.6875rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.architecture-component__type {
-  font-size: 9px;
-  font-weight: 750;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
+.arch-route {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 6px;
 }
 
-.architecture-component--frontend {
-  top: 311px;
-  left: 100px;
-  width: 176px;
-  border-color: var(--frontend);
-  border-radius: 40px;
-  background: oklch(24% 0.035 185);
+.arch-route code {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-family: var(--font-code);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.architecture-component--frontend .architecture-component__type { color: var(--frontend); }
-
-.architecture-component--api {
-  top: 311px;
-  left: 419px;
-  width: 162px;
-  border-color: var(--project);
-  border-radius: 5px;
-  background: oklch(25% 0.035 95);
+.arch-method {
+  flex: 0 0 auto;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: var(--surface-hover);
+  font-family: var(--font-code);
+  font-size: 0.625rem;
+  font-weight: 700;
 }
 
-.architecture-component--api::before,
-.architecture-component--api::after {
-  position: absolute;
-  top: 50%;
-  width: 10px;
-  height: 10px;
-  border: solid var(--project);
-  background: oklch(25% 0.035 95);
-  content: '';
-  transform: translateY(-50%) rotate(45deg);
+.arch-method--get { color: var(--frontend); }
+.arch-method--post { color: oklch(76% 0.15 145); }
+.arch-method--put,
+.arch-method--patch { color: var(--project); }
+.arch-method--delete { color: var(--unmatched); }
+
+/* --- edges --------------------------------------------------------------- */
+
+.arch-handle {
+  width: 1px;
+  height: 1px;
+  min-width: 0;
+  min-height: 0;
+  border: 0;
+  opacity: 0;
 }
 
-.architecture-component--api::before { left: -7px; border-width: 0 0 2px 2px; }
-.architecture-component--api::after { right: -7px; border-width: 2px 2px 0 0; }
-.architecture-component--api .architecture-component__type { color: var(--project); }
-
-.architecture-service-list {
-  position: absolute;
-  z-index: 4;
-  inset: 0;
-  pointer-events: none;
+.architecture-workspace .arch-edge .react-flow__edge-path {
+  stroke: var(--arch-edge);
+  stroke-width: 1.4px;
 }
 
-.architecture-component--service {
-  left: 724px;
-  width: 202px;
-  border-color: var(--backend);
-  border-radius: 5px;
-  background: oklch(24% 0.035 305);
+.architecture-workspace .arch-edge--unresolved .react-flow__edge-path {
+  stroke: var(--unmatched);
+  stroke-dasharray: 5 4;
 }
 
-.architecture-component--service .architecture-component__type { color: var(--backend); }
-.architecture-component--empty { top: 311px; }
-
-.architecture-external {
-  top: 56px;
-  left: 718px;
-  width: 240px;
-  min-height: 76px;
-  border-color: var(--unmatched);
-  border-radius: 5px;
-  background: oklch(24% 0.035 30);
-}
-
-.architecture-external .architecture-component__type { color: var(--unmatched); }
-
-.architecture-connections {
-  position: absolute;
-  z-index: 3;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  overflow: visible;
-  pointer-events: none;
-}
-
-.architecture-connection {
-  fill: none;
-  stroke: oklch(68% 0.025 185);
-  stroke-width: 1.5;
-}
-
-.architecture-connection--unresolved {
-  stroke: color-mix(in oklch, var(--unmatched) 72%, var(--text-muted));
-  stroke-dasharray: 6 5;
-}
-
-#architecture-arrow path { fill: oklch(68% 0.025 185); }
-#architecture-arrow-muted path { fill: var(--unmatched); }
-
-.architecture-connection-label rect {
-  fill: oklch(14% 0.012 185);
-  stroke: oklch(34% 0.016 185);
-  stroke-width: 1;
-}
-
-.architecture-connection-label text {
+.architecture-workspace .arch-edge .react-flow__edge-text {
   fill: var(--text-secondary);
-  font-family: var(--font-ui);
+  font-family: var(--font-code);
   font-size: 10px;
   font-weight: 600;
 }
 
-.architecture-connection-label--unresolved rect {
-  stroke: color-mix(in oklch, var(--unmatched) 50%, var(--border-subtle));
+.architecture-workspace .arch-edge .react-flow__edge-textbg { fill: var(--surface-base); }
+.architecture-workspace .react-flow__arrowhead * { fill: var(--arch-edge); stroke: none; }
+.architecture-workspace .arch-edge--unresolved .react-flow__arrowhead * { fill: var(--unmatched); }
+
+/* --- legend -------------------------------------------------------------- */
+
+.arch-key {
+  position: absolute;
+  z-index: 5;
+  right: var(--space-lg);
+  bottom: var(--space-lg);
+  display: flex;
+  gap: var(--space-lg);
+  padding: 6px var(--space-md);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  background: oklch(18% 0.012 185 / 0.94);
+  color: var(--text-secondary);
+  font-size: 0.6875rem;
 }
 
-@container (max-width: 720px) {
-  .architecture-scroll {
-    display: block;
-    padding: 88px 24px 48px;
-  }
+.arch-key span { display: inline-flex; align-items: center; gap: 6px; }
+.arch-key svg { width: 16px; height: 16px; }
+
+/* Below this the diagram fills the pane and the legend would sit on top of it. */
+@container (max-width: 1080px) {
+  .arch-key { display: none; }
 }
 
 .react-flow__node-tree {
@@ -1198,3 +999,42 @@
 .activity__pending--nested li { padding: 2px 4px; }
 .activity__binary { color: var(--text-muted); }
 .activity__when { width: 104px; }
+
+/* Dev-only demo data picker (see src/demo). */
+.demo-picker {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  margin-left: auto;
+  padding-bottom: var(--space-sm);
+}
+
+.demo-picker__badge {
+  margin-right: var(--space-xs);
+  color: var(--text-muted);
+  font-size: 0.625rem;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.demo-picker button {
+  min-height: 24px;
+  padding: 0 var(--space-sm);
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  color: var(--text-muted);
+  background: var(--surface-node);
+  cursor: pointer;
+  font-family: var(--font-code);
+  font-size: 0.6875rem;
+}
+
+.demo-picker button:hover { color: var(--text-primary); background: var(--surface-hover); }
+.demo-picker button:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+
+.demo-picker .demo-picker__active {
+  border-color: var(--project);
+  color: var(--surface-base);
+  background: var(--project);
+}

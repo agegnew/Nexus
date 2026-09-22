@@ -1,16 +1,32 @@
-# React + Vite
+# visualizer-ui
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React + Vite frontend for the Nexus IntelliJ plugin. The plugin opens this app in a
+JCEF browser (`http://localhost:5173` in dev), then injects the analysis result as
+`window.__CODE_VISUALIZER_GRAPH__` and dispatches a `code-visualizer:graph` event.
 
-Currently, two official plugins are available:
+## Working on the frontend without the IDE
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+`npm run dev` and open http://localhost:5173 — with no plugin attached the app seeds
+itself from the fixtures in [`src/demo`](src/demo), so both the code tree and the
+architecture view render straight away. A picker in the view switcher swaps datasets:
 
-## React Compiler
+| Fixture | URL | Covers |
+| --- | --- | --- |
+| TaskFlow | `?demo=taskflow` | 13 calls, 10 routes, FastAPI + Spring, 3 unresolved |
+| Minimal | `?demo=minimal` | Smallest useful tree, one matched + one unresolved call |
+| Empty | `?demo=empty` | `status: "empty"` state |
+| Error | `?demo=error` | `status: "error"` state |
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+`?demo=off` disables seeding. Demo data is dev-only: it is skipped when the plugin
+launched the page (it passes `projectName` / `projectPath`), it is replaced the moment
+a real `code-visualizer:graph` event arrives, and the picker never renders in a
+production build.
 
-## Expanding the ESLint configuration
+The fixtures mirror the `ProjectGraph` payload in `src/main/kotlin/ProjectFlowAnalyzer.kt`
+— keep them in sync when that data model changes.
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+## Scripts
+
+- `npm run dev` — dev server on port 5173
+- `npm run build` — production build into `dist/`
+- `npm run lint` — ESLint
