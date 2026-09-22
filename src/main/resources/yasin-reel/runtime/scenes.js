@@ -154,7 +154,59 @@ window.ReelScenes = (function () {
    * equally above and below and the half above the top edge never reaches scrollHeight.
    * That is exactly the case that shipped: the tall value was cut off at both ends.
    */
-  function spills(host, deep) {
+  /*
+   * How much of its own text an element is cutting off, past what is only rounding.
+   *
+   * The tolerances are a fraction of a line and a fraction of an em rather than a flat
+   * pixel, and that is the whole point. Display type reports a scrollHeight a few
+   * pixels over its clientHeight purely from line box rounding, and the bigger the type
+   * the bigger that gap: at 132px it was 5px. Read against a 1px tolerance that looked
+   * like a hidden line, so the fit pass shrank a number to its floor and a tile with
+   * room for 132px digits rendered them at 60. A line that is genuinely hidden costs a
+   * whole line box, so anything under half of one is rounding and nothing is missing.
+   */
+  function clips(node) {
+    var style = window.getComputedStyle(node);
+    var size = num(style.fontSize);
+    var line = num(style.lineHeight) || size * 1.2;
+    /*
+     * The tolerance is the glyph overhang and nothing else.
+     *
+     * A typeface's ascent plus descent is around 1.2em, so a line box set tighter than
+     * that cannot contain its own glyphs and the element reports the difference as
+     * overflow although nothing is missing. Where the leading is generous there is no
+     * overhang and the tolerance is a pixel, because there anything over really is a
+     * line being cut.
+     *
+     * Both halves of that matter, and getting either wrong is visible. A flat 1px let
+     * 132px digits report 5px of rounding as a hidden line, so the fit pass shrank them
+     * to 60px in a tile with room for all of it. Half a line, which was the first fix,
+     * went too far the other way and let a third of a line of body copy be shaved off
+     * the bottom of a card.
+     */
+    var overhang = Math.max(0, size * 1.2 - line);
+    // Two on top of the overhang, not one: scrollHeight and clientHeight are each
+    // rounded to whole pixels independently, so they can disagree by a pixel in either
+    // direction with nothing actually wrong.
+    var over = Math.max(0, node.scrollHeight - node.clientHeight - overhang - 2);
+    // One line ending in an ellipsis is the graceful case the stylesheet asked for,
+    // not a spill, and shrinking the whole block to avoid it helps nobody.
+    var tidy = style.textOverflow === 'ellipsis' && style.whiteSpace.indexOf('nowrap') >= 0;
+    if (!tidy) {
+      // Sideways the only routine slack is the letter-spacing trailing the last glyph.
+      over += Math.max(0, node.scrollWidth - node.clientWidth - Math.max(1, num(style.letterSpacing)));
+    }
+    return over;
+  }
+
+  /**
+   * @param nodes the blocks this fit owns. They are checked directly as well as through
+   *        `host`, because `host.children` is one level deep and the block that clips is
+   *        routinely a level below that: a card title lives inside the card's top row,
+   *        so the card sees a row overflowing by 1px while the title inside it is
+   *        cutting four lines down to three.
+   */
+  function spills(host, deep, nodes) {
     if (!host) return false;
     var box = contentBox(host);
     if (!box) return false;
@@ -175,13 +227,48 @@ window.ReelScenes = (function () {
       // shrink and trim passes treat that as an overflow and undo it; the clamp pass
       // must not, or it would go on cutting lines forever.
       if (!deep) continue;
-      if (kid.scrollHeight > kid.clientHeight + 1) return true;
-      // One line ending in an ellipsis is the graceful case the stylesheet asked for,
-      // not a spill, and shrinking the whole block to avoid it helps nobody.
-      var tidy = style.textOverflow === 'ellipsis' && style.whiteSpace.indexOf('nowrap') >= 0;
-      if (!tidy && kid.scrollWidth > kid.clientWidth + 1) return true;
+      if (clips(kid) > 0) return true;
+    }
+    if (!deep) return false;
+    // The host hides its own overflow too, so it can be the thing doing the cutting: an
+    // architecture band whose pills wrap to a row it has no height for clips them
+    // itself, and no child of it reports anything wrong.
+    if (clips(host) > 0) return true;
+    for (var n = 0; nodes && n < nodes.length; n++) {
+      if (nodes[n] && clips(nodes[n]) > 0) return true;
     }
     return false;
+  }
+
+  /*
+   * How far past its box `host` reaches, as one number.
+   *
+   * `spills` answers yes or no, which is all the shrink pass needs. The trim pass needs
+   * to know whether what it just removed made anything better, so it needs a magnitude,
+   * and the two have to agree about what counts as overflow or the trim pass would
+   * chase a spill the shrink pass does not believe in. Same rules, different answer.
+   */
+  function excess(host, nodes) {
+    var box = contentBox(host);
+    if (!box) return 0;
+    var total = 0;
+    var kids = host.children;
+    for (var i = 0; i < kids.length; i++) {
+      var kid = kids[i];
+      var style = window.getComputedStyle(kid);
+      if (style.position === 'absolute' || style.position === 'fixed') continue;
+      if (style.display === 'none') continue;
+      var rect = kid.getBoundingClientRect();
+      if (!rect.width && !rect.height) continue;
+      total += Math.max(0, box.top - rect.top) + Math.max(0, rect.bottom - box.bottom);
+      total += Math.max(0, box.left - rect.left) + Math.max(0, rect.right - box.right);
+      total += clips(kid);
+    }
+    total += clips(host);
+    for (var n = 0; nodes && n < nodes.length; n++) {
+      if (nodes[n]) total += clips(nodes[n]);
+    }
+    return total;
   }
 
   /*
@@ -193,12 +280,12 @@ window.ReelScenes = (function () {
     if (!host || !nodes) return;
     var live = [];
     for (var i = 0; i < nodes.length; i++) if (nodes[i]) live.push(nodes[i]);
-    if (!live.length || !spills(host, true)) return;
+    if (!live.length || !spills(host, true, live)) return;
     var min = floor === undefined ? 15 : floor;
     var base = [];
     for (var b = 0; b < live.length; b++) base.push(num(window.getComputedStyle(live[b]).fontSize) || 16);
     var scale = 1;
-    for (var step = 0; step < 24 && spills(host, true); step++) {
+    for (var step = 0; step < 24 && spills(host, true, live); step++) {
       scale -= 0.03;
       var floored = 0;
       for (var n = 0; n < live.length; n++) {
@@ -221,7 +308,7 @@ window.ReelScenes = (function () {
    * decided here rather than written into a rule.
    */
   function clampInto(host, nodes) {
-    for (var guard = 0; guard < 30 && spills(host); guard++) {
+    for (var guard = 0; guard < 30 && spills(host, false, nodes); guard++) {
       var tallest = null;
       var lines = 0;
       var height = -1;
@@ -248,13 +335,30 @@ window.ReelScenes = (function () {
    * ellipsis in their place. Nothing is ever cut through the middle of a line.
    */
   function trimInto(host, nodes) {
+    /*
+     * `stale` is how this pass knows when to stop, and it shipped without one.
+     *
+     * A 6px badge overhanging its own box was enough to make every step of a journey
+     * read "opens...", "reads...", "watches...": the spill was real, no amount of
+     * trimming could resolve it, and the loop only stopped when each line was down to
+     * its last word. Counting words removed is the wrong bound, because a card that
+     * genuinely holds five lines too many needs a lot of them removed. What matters is
+     * whether removing them is working, so that is what gets measured: a node whose
+     * words have stopped buying any reduction in overflow is abandoned, and the
+     * stylesheet's own clamp handles it from there.
+     *
+     * The tolerance is generous because one word rarely collapses a line on its own.
+     */
+    var stale = {};
+    var idle = {};
     // The deep check, because the case this exists for is a flex item that was shrunk
     // by its own container and is now clipping its text through the middle of a line.
-    for (var guard = 0; guard < 60 && spills(host, true); guard++) {
+    for (var guard = 0; guard < 60 && spills(host, true, nodes); guard++) {
       var tallest = null;
       var height = -1;
       for (var i = 0; i < nodes.length; i++) {
         var node = nodes[i];
+        if (stale[i]) continue;
         // A plain run of text only. A heading split into per-word spans is animated by
         // reference, so its words are not this pass's to remove.
         if (!node || node.children.length || !node.textContent) continue;
@@ -264,11 +368,20 @@ window.ReelScenes = (function () {
         var parts = node.textContent.replace(/\u2026$/, '').trim().split(' ');
         if (parts.length < 2) continue;
         var box = node.getBoundingClientRect().height;
-        if (box > height) { height = box; tallest = { node: node, parts: parts }; }
+        if (box > height) { height = box; tallest = { node: node, parts: parts, at: i }; }
       }
       if (!tallest) return;
+      var before = excess(host, nodes);
       tallest.parts.pop();
       tallest.node.textContent = tallest.parts.join(' ') + '\u2026';
+      if (excess(host, nodes) < before - 0.5) {
+        idle[tallest.at] = 0;
+      } else {
+        idle[tallest.at] = (idle[tallest.at] || 0) + 1;
+        // Six words gone with nothing to show for it means the overflow is not this
+        // node's to fix, and taking a seventh only costs the reader a word.
+        if (idle[tallest.at] >= 6) stale[tallest.at] = true;
+      }
     }
   }
 
@@ -375,14 +488,73 @@ window.ReelScenes = (function () {
     tl.fromTo(targets, calm(from), calm(to), at);
   }
 
-  /** A slow push on the framing block, the one thing that makes a still read as film. */
-  function drift(tl, target, at, dur, amount) {
+  /*
+   * The slow push on a framing block, and the reason a paused frame still reads as
+   * film rather than as a screenshot.
+   *
+   * It replaced a 1.6% scale that was, honestly, too small to see. Two blocks in the
+   * same scene are given different amounts and opposite directions, so the frame has
+   * layers moving at different rates rather than one plane creeping.
+   */
+  function drift(tl, target, at, dur, amount, opts) {
     if (!target || REDUCED) return;
-    var end = amount === undefined ? 1.028 : amount;
-    gsap.set(target, { scale: 1 });
-    tl.fromTo(target, { scale: 1 }, {
-      scale: end, duration: Math.max(dur, 0.1), ease: 'none', immediateRender: false
+    opts = opts || {};
+    var end = amount === undefined ? 1.045 : amount;
+    var from = { scale: 1, x: 0, y: 0 };
+    gsap.set(target, { scale: 1, x: 0, y: 0, transformOrigin: opts.origin || '50% 50%' });
+    tl.fromTo(target, from, {
+      scale: end,
+      x: opts.x === undefined ? 0 : opts.x,
+      y: opts.y === undefined ? 0 : opts.y,
+      duration: Math.max(dur, 0.1), ease: 'none', immediateRender: false
     }, at);
+  }
+
+  /**
+   * Mounts one icon, chosen from the words already on screen beside it.
+   *
+   * `taken` is per scene, so a grid of six cards comes out wearing six different
+   * faces rather than the same one repeated, which is what a keyword match on similar
+   * titles would otherwise produce.
+   */
+  function iconIn(host, primary, secondary, index, taken, cls) {
+    if (!window.ReelIcons || !host) return null;
+    var name = window.ReelIcons.pick(primary, secondary, index, taken);
+    return window.ReelIcons.el(host, name, cls);
+  }
+
+  /** The entrance for an icon: overshoots, so it lands rather than appearing. */
+  function pop(tl, targets, at, opts) {
+    if (empty(targets)) return;
+    opts = opts || {};
+    var from = { autoAlpha: 0, scale: 0.34, rotation: REDUCED ? 0 : -16 };
+    var to = {
+      autoAlpha: 1, scale: 1, rotation: 0,
+      duration: opts.duration === undefined ? 0.5 : opts.duration,
+      ease: REDUCED ? 'power1.out' : 'back.out(2.4)',
+      stagger: opts.stagger === undefined ? STEP : opts.stagger,
+      immediateRender: false
+    };
+    gsap.set(targets, calm({ autoAlpha: 0, scale: 0.34, rotation: -16, transformOrigin: '50% 50%' }));
+    tl.fromTo(targets, calm(from), calm(to), at);
+  }
+
+  /*
+   * A gentle float that runs for the rest of the scene. One per icon, phase shifted by
+   * position, so a row of six is never in lockstep: six things bobbing together read
+   * as one object, and six things bobbing out of phase read as six.
+   */
+  function bob(tl, nodes, start, dur, from) {
+    if (REDUCED || !nodes || !nodes.length) return;
+    var span = Math.max(dur - (from - start) - 0.2, 0.5);
+    for (var i = 0; i < nodes.length; i++) {
+      if (!nodes[i]) continue;
+      var lead = (i % 3) * 0.16;
+      var half = Math.max((span - lead) / 2, 0.35);
+      tl.fromTo(nodes[i], { y: 0 }, {
+        y: -7, duration: half, ease: 'sine.inOut', yoyo: true, repeat: 1, immediateRender: false
+      }, from + lead);
+    }
   }
 
   /*
@@ -403,17 +575,32 @@ window.ReelScenes = (function () {
    * scene has left after its entrance. This is the second motion in most scenes: it
    * also reads as the film pointing at each item in turn.
    */
-  function sweep(tl, glows, from, until) {
+  function sweep(tl, glows, from, until, cards, icons) {
     if (REDUCED || !glows || !glows.length) return;
     var span = Math.max(until - from, 0.6);
     var slot = span / glows.length;
     var hold = Math.min(Math.max(slot * 0.45, 0.25), 0.7);
     for (var i = 0; i < glows.length; i++) {
+      var at = from + i * slot;
       gsap.set(glows[i], { autoAlpha: 0 });
       tl.fromTo(glows[i], { autoAlpha: 0 }, {
         autoAlpha: 1, duration: hold, ease: 'sine.inOut',
         yoyo: true, repeat: 1, immediateRender: false
-      }, from + i * slot);
+      }, at);
+      // The lit card also grows very slightly and its icon leans. A tint alone is a
+      // change of colour; a change of size is the film physically pointing at it.
+      if (cards && cards[i]) {
+        tl.fromTo(cards[i], { scale: 1 }, {
+          scale: 1.022, duration: hold, ease: 'sine.inOut',
+          yoyo: true, repeat: 1, transformOrigin: '50% 50%', immediateRender: false
+        }, at);
+      }
+      if (icons && icons[i]) {
+        tl.fromTo(icons[i], { scale: 1, rotation: 0 }, {
+          scale: 1.16, rotation: 7, duration: hold, ease: 'sine.inOut',
+          yoyo: true, repeat: 1, transformOrigin: '50% 50%', immediateRender: false
+        }, at);
+      }
     }
   }
 
@@ -537,12 +724,13 @@ window.ReelScenes = (function () {
     var el = scene('title');
     var block = add(el, 'div', 'ti__block');
 
-    var top = add(block, 'div', 'ti__top');
-    var mark = add(top, 'span', 'ti__mark');
-    add(mark, 'span', 'ti__ring');
-    add(mark, 'span', 'ti__core');
     var project = text(theme && theme.projectName);
     var name = text(slots.productName, project || 'This project');
+    var blurb = text(slots.tagline);
+
+    var top = add(block, 'div', 'ti__top');
+    var mark = add(top, 'span', 'ti__mark');
+    var icon = iconIn(mark, name, blurb, 0, null);
     var kicker = add(top, 'span', 'ti__kicker', project && project !== name ? project : 'Nexus Reel');
 
     var mid = add(block, 'div', 'ti__mid');
@@ -551,7 +739,7 @@ window.ReelScenes = (function () {
     var marks = words(heading, name, true);
     var rule = add(mid, 'span', 'ti__rule');
     var tagline = text(slots.tagline) ? add(mid, 'p', 'ti__tagline', text(slots.tagline)) : null;
-    if (tagline) scaleType(tagline, slots.tagline, [[70, 34], [130, 29], [220, 25], [999, 21]]);
+    if (tagline) scaleType(tagline, slots.tagline, [[70, 38], [130, 32], [220, 27], [999, 23]]);
 
     var foot = add(block, 'div', 'ti__foot');
     var repo = text(slots.repoUrl) ? add(foot, 'span', 'ti__repo', text(slots.repoUrl)) : null;
@@ -564,8 +752,10 @@ window.ReelScenes = (function () {
           { host: mid, nodes: [heading, tagline], floor: 20 },
           { host: block, nodes: [heading, tagline], floor: 20 }
         ]);
-        drift(tl, block, start, dur, 1.022);
-        rise(tl, top.children, start + HEAD_AT, { y: 10, duration: 0.35, stagger: 0.05 });
+        drift(tl, block, start, dur, 1.05, { y: -9 });
+        pop(tl, icon, start + HEAD_AT, { duration: 0.6 });
+        bob(tl, [icon], start, dur, start + 0.75);
+        rise(tl, kicker, start + HEAD_AT + 0.1, { y: 10, duration: 0.35 });
         rise(tl, marks, start + 0.2, { y: 56, duration: 0.5, stagger: 0.055 });
         draw(tl, rule, start + 0.45, { duration: 0.5 });
         shimmer(tl, rule, start + 0.45, dur - 0.45);
@@ -583,11 +773,14 @@ window.ReelScenes = (function () {
     var block = add(el, 'div', 'bs__block');
 
     var mid = add(block, 'div', 'bs__mid');
+    var raw = text(slots.statement, text(slots.text));
+    // The icon carries the left of the frame. One sentence, however large, leaves a
+    // 16:9 stage looking like a pull quote in a document; a mark beside it composes.
+    var icon = iconIn(mid, raw, text(slots.context), 1, null);
     // A rule the full height of the frame rather than a short one across the top: one
     // sentence cannot fill 16:9 on its own, so the composition has to.
     var bar = add(mid, 'span', 'bs__bar');
     var quote = add(mid, 'blockquote', 'bs__text');
-    var raw = text(slots.statement, text(slots.text));
     scaleType(quote, raw, [[24, 100], [44, 82], [72, 68], [120, 54], [200, 44], [330, 36], [999, 30]]);
     var marks = words(quote, raw, true);
 
@@ -603,7 +796,9 @@ window.ReelScenes = (function () {
           { host: mid, nodes: [quote], floor: 22 },
           { host: block, nodes: [quote, context], floor: 17 }
         ]);
-        drift(tl, block, start, dur, 1.02);
+        drift(tl, block, start, dur, 1.042, { y: -7 });
+        pop(tl, icon, start + HEAD_AT, { duration: 0.6 });
+        bob(tl, [icon], start, dur, start + 0.8);
         draw(tl, bar, start + HEAD_AT, { axis: 'y', duration: 0.55 });
         shimmer(tl, bar, start, dur, 'y');
         rise(tl, marks, start + 0.18, { y: 44, duration: 0.5, stagger: 0.05 });
@@ -642,10 +837,13 @@ window.ReelScenes = (function () {
     var glows = [];
     var fits = [];
     var counts = [];
+    var icons = [];
+    var taken = {};
     for (var i = 0; i < stats.length; i++) {
       var cell = add(grid, 'div', 'sg__cell');
       glows.push(glow(cell));
       bars.push(add(cell, 'span', 'sg__bar'));
+      icons.push(iconIn(cell, text(stats[i].label), text(stats[i].value), i, taken));
       var prose = proseValue(stats[i].value);
       var value = add(cell, 'strong', 'sg__value' + (prose ? ' sg__value--prose' : ''));
       // Written now rather than by the count, because the fit pass has to measure the
@@ -680,7 +878,9 @@ window.ReelScenes = (function () {
         var open = start + BODY_AT;
         rise(tl, cells, open, { y: 26, duration: IN, stagger: STEP });
         draw(tl, bars, open + 0.12, { duration: 0.4, stagger: STEP });
+        pop(tl, icons, open + 0.14, { stagger: STEP });
         var settled = open + STEP * cells.length + IN;
+        bob(tl, icons, start, dur, settled);
         // Long enough to read as counting, short enough to settle before the cut.
         var span = Math.max(0.7, Math.min(1.3, dur - 1.4));
         for (var i = 0; i < values.length; i++) {
@@ -688,7 +888,7 @@ window.ReelScenes = (function () {
           // paragraph on every frame, so prose is written once and left alone.
           if (counts[i]) countUp(tl, values[i], stats[i].value, open + 0.1 + i * STEP, span);
         }
-        sweep(tl, glows, settled, start + dur - 0.2);
+        sweep(tl, glows, settled, start + dur - 0.2, cells, icons);
       }
     };
   }
@@ -711,18 +911,22 @@ window.ReelScenes = (function () {
     var bars = [];
     var glows = [];
     var fits = [];
+    var icons = [];
+    var taken = {};
     for (var i = 0; i < cards.length; i++) {
       var card = add(row, 'article', 'cc__card');
       glows.push(glow(card));
       bars.push(add(card, 'span', 'cc__bar'));
       var top = add(card, 'div', 'cc__top');
-      add(top, 'span', 'cc__index', (i + 1) < 10 ? '0' + (i + 1) : String(i + 1));
+      // The icon replaces the 01, 02, 03 that used to number these. A card in a row of
+      // four does not need to be told its position, and the icon says what it is about.
+      icons.push(iconIn(top, text(cards[i].title), text(cards[i].body), i, taken));
       var title = add(top, 'h3', 'cc__title', text(cards[i].title));
-      scaleType(title, cards[i].title, cols >= 3 ? [[24, 27], [48, 23], [999, 20]] : [[30, 32], [60, 27], [999, 23]]);
+      scaleType(title, cards[i].title, cols >= 3 ? [[24, 33], [48, 28], [999, 24]] : [[30, 39], [60, 33], [999, 27]]);
       var copy = null;
       if (text(cards[i].body)) {
         copy = add(card, 'p', 'cc__body', text(cards[i].body));
-        scaleType(copy, cards[i].body, cols >= 3 ? [[90, 20], [180, 18], [999, 16]] : [[120, 22], [260, 20], [999, 17]]);
+        scaleType(copy, cards[i].body, cols >= 3 ? [[90, 24], [180, 21], [999, 18]] : [[120, 27], [260, 23], [999, 19]]);
       }
       refIn(ctx, card, cards[i].file, cards[i].line);
       fits.push({ host: card, nodes: [title, copy], floor: 14 });
@@ -738,7 +942,10 @@ window.ReelScenes = (function () {
         var open = start + BODY_AT;
         rise(tl, nodes, open, { y: 30, scale: 0.975, duration: IN, stagger: STEP });
         draw(tl, bars, open + 0.14, { duration: 0.4, stagger: STEP });
-        sweep(tl, glows, open + STEP * nodes.length + IN, start + dur - 0.2);
+        pop(tl, icons, open + 0.16, { stagger: STEP });
+        var landed = open + STEP * nodes.length + IN;
+        bob(tl, icons, start, dur, landed);
+        sweep(tl, glows, landed, start + dur - 0.2, nodes, icons);
       }
     };
   }
@@ -760,14 +967,22 @@ window.ReelScenes = (function () {
     var glows = [];
     var parts = [];
     var fits = [];
+    var icons = [];
+    var taken = {};
     for (var i = 0; i < layers.length; i++) {
       var row = add(stack, 'div', 'al__layer');
       glows.push(glow(row));
+      var components = list(layers[i].components, 8);
+      // What a band contains says more about it than its name alone: a layer called
+      // "Core" is unreadable, the same layer holding Gson and a JSON contract is not.
+      var inside = '';
+      for (var c = 0; c < components.length; c++) {
+        inside += ' ' + text(components[c].name) + ' ' + text(components[c].tech);
+      }
       var headCell = add(row, 'div', 'al__head');
-      add(headCell, 'span', 'al__index', String(i + 1));
+      icons.push(iconIn(headCell, text(layers[i].name), inside, i, taken));
       var name = add(headCell, 'span', 'al__name', text(layers[i].name));
       var bag = add(row, 'div', 'al__parts');
-      var components = list(layers[i].components, 8);
       var owned = [];
       for (var j = 0; j < components.length; j++) {
         var part = add(bag, 'span', 'al__part');
@@ -788,7 +1003,7 @@ window.ReelScenes = (function () {
       animate: function (tl, start, dur) {
         settle(fits);
         head.animate(tl, start, dur);
-        drift(tl, body, start, dur, 1.014);
+        drift(tl, body, start, dur, 1.03, { y: -6 });
         var open = start + BODY_AT;
         // Layers land top-down, so the picture assembles the way you would draw it.
         var step = Math.max(0.16, Math.min(0.3, (dur - 1.8) / Math.max(rows.length, 1)));
@@ -796,10 +1011,12 @@ window.ReelScenes = (function () {
         for (var i = 0; i < rows.length; i++) {
           var at = open + i * step;
           rise(tl, rows[i], at, { y: 16, x: -18, duration: IN });
+          if (icons[i]) pop(tl, icons[i], at + 0.06, { duration: 0.44 });
           if (parts[i].length) rise(tl, parts[i], at + 0.1, { y: 10, duration: 0.34, stagger: 0.04 });
           last = at + 0.1 + 0.04 * parts[i].length + 0.34;
         }
-        sweep(tl, glows, last, start + dur - 0.2);
+        bob(tl, icons, start, dur, last);
+        sweep(tl, glows, last, start + dur - 0.2, rows, icons);
       }
     };
   }
@@ -841,6 +1058,7 @@ window.ReelScenes = (function () {
     var halos = [];
     var labels = [];
     var fits = [];
+    var taken = {};
     for (var i = 0; i < n; i++) {
       var node = add(rail, 'div', 'ft__node');
       node.style.left = centre(i, n) + '%';
@@ -851,11 +1069,15 @@ window.ReelScenes = (function () {
       var up = add(node, 'div', 'ft__slot ft__slot--up');
       var mark = add(node, 'span', 'ft__mark');
       halos.push(add(mark, 'span', 'ft__halo'));
-      dots.push(add(mark, 'span', 'ft__dot'));
+      // The icon is the node itself. Every pulse the packet triggers on arrival was
+      // already written against `dots`, so putting the icon in that slot means the
+      // whole travelling animation now lands on something that says what the step is.
+      dots.push(iconIn(mark, text(steps[i].label), text(steps[i].detail), i, taken, 'ic--round')
+        || add(mark, 'span', 'ft__dot'));
       var down = add(node, 'div', 'ft__slot ft__slot--down');
       var card = add(i % 2 === 0 ? down : up, 'div', 'ft__body');
       var label = add(card, 'span', 'ft__label', text(steps[i].label, 'Step ' + (i + 1)));
-      scaleType(label, steps[i].label, n >= 5 ? [[26, 19], [60, 17], [999, 15]] : [[26, 23], [60, 20], [999, 17]]);
+      scaleType(label, steps[i].label, n >= 5 ? [[26, 22], [60, 19], [999, 16]] : [[26, 28], [60, 23], [999, 20]]);
       var detail = text(steps[i].detail) ? add(card, 'span', 'ft__detail', text(steps[i].detail)) : null;
       refIn(ctx, card, steps[i].file, steps[i].line);
       fits.push({ host: card, nodes: [label, detail], floor: 12 });
@@ -872,6 +1094,7 @@ window.ReelScenes = (function () {
         // After mount, so the percentage column widths these cards live in are real.
         settle(fits);
         head.animate(tl, start, dur);
+        drift(tl, body, start, dur, 1.028, { y: -5 });
         gsap.set(nodes, { xPercent: -50 });
         gsap.set(packet, { xPercent: -50, yPercent: -50 });
         gsap.set(halos, { autoAlpha: 0, scale: 0.4, transformOrigin: '50% 50%' });
@@ -880,7 +1103,9 @@ window.ReelScenes = (function () {
         rise(tl, nodes, open, { y: 18, duration: 0.38, stagger: 0.05 });
         // Steps start dim and light up as the packet reaches them.
         gsap.set(labels, { autoAlpha: 0.4 });
-        gsap.set(dots, { scale: 1, transformOrigin: '50% 50%' });
+        // After the gsap.set above, not before: pop parks the icons in its own from
+        // state, and a set running afterwards would quietly undo that parking.
+        pop(tl, dots, open + 0.08, { stagger: 0.05, duration: 0.46 });
 
         var runStart = open + 0.05 * n + 0.32;
         rise(tl, packet, runStart - 0.24, { y: 0, scale: 0.2, duration: 0.28 });
@@ -903,8 +1128,9 @@ window.ReelScenes = (function () {
             left: centre(i + 1, n) + '%', duration: travel, ease: 'power2.inOut', immediateRender: false
           }, at);
           var landed = at + travel;
-          tl.fromTo(dots[i + 1], { scale: 1 }, {
-            scale: 1.45, duration: 0.14, ease: 'power2.out', yoyo: true, repeat: 1, immediateRender: false
+          tl.fromTo(dots[i + 1], { scale: 1, rotation: 0 }, {
+            scale: 1.3, rotation: 9, duration: 0.16, ease: 'power2.out',
+            yoyo: true, repeat: 1, immediateRender: false
           }, landed);
           tl.fromTo(halos[i + 1], { autoAlpha: 0.55, scale: 0.4 }, {
             autoAlpha: 0, scale: 2.1, duration: 0.5, ease: 'power2.out', immediateRender: false
@@ -935,16 +1161,23 @@ window.ReelScenes = (function () {
 
     var rows = [];
     var fits = [];
+    var icons = [];
+    var taken = {};
     for (var i = 0; i < steps.length; i++) {
       var row = add(stack, 'div', 'jr__step');
-      add(row, 'span', 'jr__badge', String(i + 1));
+      // The icon becomes the badge and the number shrinks into its corner. The order
+      // still matters on a journey, so the number stays; it just stops being the only
+      // thing distinguishing one beat from the next.
+      var mark = add(row, 'span', 'jr__mark');
+      icons.push(iconIn(mark, text(steps[i].action, text(steps[i].label)), text(steps[i].actor), i, taken));
+      add(mark, 'span', 'jr__badge', String(i + 1));
       var card = add(row, 'div', 'jr__body');
       var actor = text(steps[i].actor) ? add(card, 'span', 'jr__actor', text(steps[i].actor)) : null;
       var action = add(card, 'span', 'jr__action', text(steps[i].action, text(steps[i].label)));
       scaleType(action, steps[i].action || steps[i].label,
         steps.length >= 7
-          ? [[46, 22], [90, 19], [999, 17]]
-          : steps.length >= 5 ? [[46, 26], [90, 22], [999, 19]] : [[46, 32], [90, 26], [999, 22]]);
+          ? [[46, 25], [90, 21], [999, 18]]
+          : steps.length >= 5 ? [[46, 31], [90, 26], [999, 22]] : [[46, 40], [90, 32], [999, 26]]);
       refIn(ctx, card, steps[i].file, steps[i].line);
       // Each step owns an equal share of the frame, so a long one shrinks inside its
       // share instead of pushing the step under it off the bottom.
@@ -957,6 +1190,7 @@ window.ReelScenes = (function () {
       animate: function (tl, start, dur) {
         settle(fits);
         head.animate(tl, start, dur);
+        drift(tl, body, start, dur, 1.026, { y: -5 });
         var open = start + BODY_AT;
         var run = Math.max(1.2, dur - (BODY_AT + 0.4));
         // Every step is on screen by about the middle of the scene. Paced across the
@@ -973,8 +1207,11 @@ window.ReelScenes = (function () {
           }, open);
         }
         for (var i = 0; i < rows.length; i++) {
-          rise(tl, rows[i], open + reveal * (i / rows.length), { y: 12, x: 22, duration: IN });
+          var at = open + reveal * (i / rows.length);
+          rise(tl, rows[i], at, { y: 12, x: 22, duration: IN });
+          if (icons[i]) pop(tl, icons[i], at + 0.08, { duration: 0.46 });
         }
+        bob(tl, icons, start, dur, open + reveal + 0.3);
       }
     };
   }
@@ -985,14 +1222,14 @@ window.ReelScenes = (function () {
     var el = scene('outro');
     var block = add(el, 'div', 'ou__block');
     var mid = add(block, 'div', 'ou__mid');
-    var mark = add(mid, 'span', 'ou__mark');
-    add(mark, 'span', 'ou__ring');
-    add(mark, 'span', 'ou__core');
-    var heading = add(mid, 'h2', 'ou__cta');
     // `headline` and `sub` are the names the Kotlin directors used before the two
     // halves were reconciled, and a model given the old catalogue can still send them.
     // Reading both beats rendering a placeholder over whatever was actually written.
     var call = text(slots.cta, text(slots.headline, 'Thanks for watching'));
+    var mark = add(mid, 'span', 'ou__mark');
+    var ring = add(mark, 'span', 'ou__ring');
+    var icon = iconIn(mark, call, text(slots.repoUrl, text(slots.sub)), 0, null);
+    var heading = add(mid, 'h2', 'ou__cta');
     scaleType(heading, call, [[28, 78], [52, 62], [90, 50], [150, 40], [999, 32]]);
     var marks = words(heading, call, true);
     var rule = add(mid, 'span', 'ou__rule');
@@ -1011,11 +1248,12 @@ window.ReelScenes = (function () {
           { host: mid, nodes: [heading], floor: 22 },
           { host: block, nodes: [heading, repo, stamp], floor: 16 }
         ]);
-        drift(tl, block, start, dur, 1.02);
-        rise(tl, mark, start + HEAD_AT, { y: 0, scale: 0.5, duration: 0.45 });
-        gsap.set(mark.querySelector('.ou__ring'), { transformOrigin: '50% 50%' });
+        drift(tl, block, start, dur, 1.04, { y: -8 });
+        pop(tl, icon, start + HEAD_AT, { duration: 0.6 });
+        bob(tl, [icon], start, dur, start + 0.8);
+        gsap.set(ring, { transformOrigin: '50% 50%' });
         // The ring keeps pulsing for the whole outro, so the last card is never a still.
-        tl.fromTo(mark.querySelector('.ou__ring'), { scale: 0.55, autoAlpha: 0.75 }, {
+        tl.fromTo(ring, { scale: 0.55, autoAlpha: 0.75 }, {
           scale: 1.9, autoAlpha: 0, duration: Math.max(dur * 0.45, 0.8), ease: 'power2.out',
           repeat: 1, immediateRender: false
         }, start + 0.2);

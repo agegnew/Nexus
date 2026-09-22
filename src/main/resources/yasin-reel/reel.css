@@ -1,19 +1,26 @@
 /*
- * Palette is lifted from visualizer-ui/src/App.css so Reel reads as part of Nexus
- * rather than as a bolted-on panel. At generate time these are overridden by the
- * palette harvested from the target project, so the film wears its own colours.
+ * A light palette, on purpose.
+ *
+ * Written in hex rather than in the oklch the team uses elsewhere because these same
+ * values are read by the headless Chrome that renders the MP4, and a colour space the
+ * renderer has to interpolate is a colour we cannot predict from here.
+ *
+ * At generate time the accents are overridden by the palette harvested from the target
+ * project, so the film wears its own colours. Surfaces are never overridden: a project
+ * whose stylesheet is all dark greys would otherwise turn its own film unreadable.
  */
 :root {
-  --surface-base: oklch(14% 0.01 185);
-  --surface-raised: oklch(18% 0.012 185);
-  --surface-node: oklch(21% 0.013 185);
-  --surface-hover: oklch(24% 0.015 185);
-  --border-subtle: oklch(31% 0.014 185);
-  --text-primary: oklch(93% 0.008 185);
-  --text-secondary: oklch(72% 0.018 185);
-  --text-muted: oklch(58% 0.015 185);
-  --accent: oklch(72% 0.12 185);
-  --accent-warm: oklch(81% 0.12 95);
+  --surface-base: #F3F5F9;
+  --surface-raised: #FFFFFF;
+  --surface-node: #FFFFFF;
+  --surface-hover: #E9EEF5;
+  --border-subtle: #DCE3ED;
+  --text-primary: #101828;
+  --text-secondary: #4A5768;
+  --text-muted: #79859A;
+  --accent: #2F6BFF;
+  --accent-warm: #F0790B;
+  --danger: #D92D20;
   --font-ui: "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
   --font-code: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
   --space-sm: 8px;
@@ -108,7 +115,9 @@ body {
   aspect-ratio: 16 / 9;
   max-height: 100%;
   margin: auto;
-  background: #000;
+  /* The letterbox, seen whenever the panel is not 16:9. Near-black would frame a
+     light film in mourning crepe. */
+  background: #E7EBF1;
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
 }
@@ -235,17 +244,27 @@ body {
 
 .reel-stage {
   /* Overridden per film from storyboard.theme.colors, which is why every accent
-     below is a token rather than a literal. */
-  --reel-accent: var(--accent);
-  --reel-accent-2: var(--accent-warm);
-  --reel-accent-3: var(--accent);
-  --reel-accent-4: var(--accent-warm);
-  --reel-bg: var(--surface-base);
-  --reel-panel: var(--surface-raised);
-  --reel-line: var(--border-subtle);
-  --reel-text: var(--text-primary);
-  --reel-dim: var(--text-secondary);
-  --reel-mute: var(--text-muted);
+     below is a token rather than a literal. Four distinct hues rather than two
+     alternating ones: a set of cards that cycles through four colours reads as
+     designed, and the same two repeating reads as a template. */
+  --reel-accent: #2F6BFF;
+  --reel-accent-2: #F0790B;
+  --reel-accent-3: #12B76A;
+  --reel-accent-4: #9B51E0;
+  --reel-bg: #F2F5FA;
+  --reel-panel: #FFFFFF;
+  --reel-line: #E3E9F2;
+  --reel-text: #0D1526;
+  --reel-dim: #46536A;
+  --reel-mute: #8492A6;
+  /*
+   * On a dark stage a 1px border was enough to separate a card from the page. On a
+   * white card on a near-white page it is not, so depth comes from shadow instead.
+   * Two of them: the resting one, and a lifted one for whatever the film is pointing
+   * at this second.
+   */
+  --reel-shadow: 0 1px 2px rgba(13, 21, 38, .05), 0 10px 26px rgba(13, 21, 38, .06);
+  --reel-lift: 0 2px 6px rgba(13, 21, 38, .07), 0 20px 46px rgba(13, 21, 38, .11);
 
   position: absolute; top: 0; left: 0;
   transform-origin: 0 0;
@@ -256,12 +275,12 @@ body {
   line-height: 1.4;
 }
 
-.reel-stage::before {
-  content: ''; position: absolute; inset: 0; pointer-events: none;
-  background:
-    radial-gradient(58% 58% at 10% 6%, color-mix(in oklab, var(--reel-accent) 18%, transparent), transparent 72%),
-    radial-gradient(52% 52% at 94% 98%, color-mix(in oklab, var(--reel-accent-2) 14%, transparent), transparent 72%);
-}
+/*
+ * No ::before wash any more. The background is a real element built by timeline.js,
+ * because the thing that made this read as a slide deck was that every pixel on screen
+ * belonged to the scene: at a cut, all of them changed at once. What is behind the
+ * scenes now outlives them.
+ */
 
 /*
  * Margins are tight on purpose. A 16:9 frame with a 76px gutter and a centred block
@@ -305,12 +324,17 @@ body {
 .scene__body > * { flex: 1 1 auto; min-width: 0; min-height: 0; }
 
 /* The travelling highlight. Parked at opacity 0 by gsap, never by a CSS animation. */
+/*
+ * The travelling highlight. Parked at opacity 0 by gsap, never by a CSS animation.
+ * Weaker than it was on the dark stage: the same 24% wash that read as a highlight on
+ * near-black reads as a stain on white.
+ */
 .glow {
   position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
   background: linear-gradient(115deg,
-    color-mix(in oklab, var(--reel-accent) 24%, transparent),
-    color-mix(in oklab, var(--reel-accent-2) 10%, transparent) 46%,
-    transparent 72%);
+    color-mix(in oklab, var(--reel-accent) 13%, transparent),
+    color-mix(in oklab, var(--reel-accent-2) 7%, transparent) 48%,
+    transparent 74%);
   opacity: 0;
 }
 
@@ -320,7 +344,9 @@ body {
   font-size: 20px; line-height: 1.3;
   color: var(--reel-text);
   text-wrap: balance;
-  text-shadow: 0 2px 12px rgba(0, 0, 0, .55);
+  /* A halo in the page colour rather than a drop shadow: the caption crosses whatever
+     the scene put under it, and on a light stage a dark shadow reads as dirt. */
+  text-shadow: 0 0 10px #FFF, 0 0 18px #FFF, 0 1px 0 #FFF;
   /* Three lines is the band the layout above reserved. A longer line of narration is
      still spoken in full and still printed in full under the transport. */
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3;
@@ -368,14 +394,11 @@ body {
   transform-origin: 50% 50%;
 }
 .ti__top { display: flex; align-items: center; gap: 14px; }
-.ti__mark { display: grid; place-items: center; width: 26px; height: 26px; }
-.ti__ring, .ou__ring {
+.ti__mark { display: grid; place-items: center; }
+/* The outro's one pulsing element, now a halo around the mark rather than a mark. */
+.ou__ring {
   grid-area: 1 / 1; width: 100%; height: 100%; border-radius: 50%;
   border: 2px solid var(--reel-accent);
-}
-.ti__core, .ou__core {
-  grid-area: 1 / 1; border-radius: 50%; background: var(--reel-accent);
-  width: 34%; height: 34%;
 }
 .ti__kicker {
   font-size: 20px; text-transform: uppercase; letter-spacing: .16em;
@@ -454,6 +477,7 @@ body {
   padding: 20px 24px;
   background: var(--reel-panel);
   border: 1px solid var(--reel-line);
+  box-shadow: var(--reel-shadow);
   border-radius: 14px;
 }
 .sg__bar {
@@ -465,6 +489,10 @@ body {
   /* 1.1 rather than 1: an overshooting glyph at 132px would otherwise be shaved by the
      clamp's own overflow. */
   font-size: 76px; font-weight: 700; line-height: 1.1; letter-spacing: -.03em;
+  /* Tighter than the font's own ascent plus descent, so the glyphs overhang their
+     line box and the clamp above would shave the overhang off. The padding catches it
+     and the negative margin gives the space straight back to the layout. */
+  padding-bottom: .08em; margin-bottom: -.08em;
   /* Without tabular figures the number jitters sideways while it counts. */
   font-variant-numeric: tabular-nums;
   /*
@@ -522,17 +550,14 @@ body {
   padding: 22px 22px 20px;
   background: var(--reel-panel);
   border: 1px solid var(--reel-line);
+  box-shadow: var(--reel-shadow);
   border-radius: 14px;
 }
 .cc__bar { position: absolute; left: 0; top: 0; width: 100%; height: 3px; background: var(--reel-accent); }
-.cc__top { display: flex; align-items: baseline; gap: 12px; }
-.cc__index {
-  flex: 0 0 auto;
-  font-family: var(--font-code); font-size: 17px; letter-spacing: .04em;
-  color: var(--reel-accent);
-}
+.cc__top { display: flex; align-items: center; gap: 14px; }
 .cc__title {
   margin: 0; min-width: 0; font-size: 27px; font-weight: 600; line-height: 1.15;
+  padding-bottom: .06em; margin-bottom: -.06em;
   overflow-wrap: anywhere;
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3;
   overflow: hidden;
@@ -562,20 +587,14 @@ body {
   padding: 12px 20px;
   background: var(--reel-panel);
   border: 1px solid var(--reel-line);
+  box-shadow: var(--reel-shadow);
   border-left: 3px solid var(--reel-accent);
   border-radius: 12px;
 }
 .al__head { display: flex; align-items: center; gap: 12px; flex: 0 0 236px; }
-.al__index {
-  width: 28px; height: 28px; flex: 0 0 28px;
-  display: grid; place-items: center;
-  border-radius: 8px;
-  font-size: 16px; font-weight: 700;
-  color: var(--reel-accent);
-  background: color-mix(in oklab, var(--reel-accent) 18%, transparent);
-}
 .al__name {
   min-width: 0; font-size: 24px; font-weight: 600; line-height: 1.15;
+  padding-bottom: .06em; margin-bottom: -.06em;
   overflow-wrap: anywhere;
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3;
   overflow: hidden;
@@ -586,7 +605,7 @@ body {
   max-width: 100%;
   padding: 6px 14px;
   border-radius: 999px;
-  background: var(--surface-node);
+  background: #F4F7FC;
   border: 1px solid var(--reel-line);
   font-size: 18px;
 }
@@ -597,9 +616,6 @@ body {
    empty. */
 .al__stack[data-count="2"] .al__name, .al__stack[data-count="3"] .al__name { font-size: 28px; }
 .al__stack[data-count="2"] .al__part, .al__stack[data-count="3"] .al__part { font-size: 20px; padding: 8px 16px; }
-.al__stack[data-count="2"] .al__index, .al__stack[data-count="3"] .al__index {
-  width: 32px; height: 32px; flex-basis: 32px; font-size: 18px;
-}
 .al__stack[data-count="4"] .al__name, .al__stack[data-count="5"] .al__name { font-size: 21px; }
 .al__stack[data-count="4"] .al__part, .al__stack[data-count="5"] .al__part { font-size: 17px; padding: 5px 12px; }
 .al__stack[data-count="4"] .al__head, .al__stack[data-count="5"] .al__head { flex-basis: 210px; }
@@ -611,7 +627,6 @@ body {
 .al__stack[data-count="6"] .al__part { font-size: 15px; padding: 4px 10px; }
 .al__stack[data-count="6"] .al__parts { gap: 5px; }
 .al__stack[data-count="6"] .al__head { flex-basis: 190px; }
-.al__stack[data-count="6"] .al__index { width: 24px; height: 24px; flex-basis: 24px; font-size: 14px; }
 
 /* ----------------------------------------------------------- flow-trace */
 
@@ -651,6 +666,7 @@ body {
   padding: 14px 12px;
   background: var(--reel-panel);
   border: 1px solid var(--reel-line);
+  box-shadow: var(--reel-shadow);
   border-radius: 12px;
 }
 .ft__body { overflow: hidden; }
@@ -751,8 +767,8 @@ body {
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
-.cut__state[data-state="failed"] { color: oklch(68% 0.16 25); }
-.picker__foot[data-tone="error"] { color: oklch(68% 0.16 25); }
+.cut__state[data-state="failed"] { color: var(--danger); }
+.picker__foot[data-tone="error"] { color: var(--danger); }
 
 /* --------------------------------------------------------------- notice */
 
@@ -803,7 +819,7 @@ body {
   padding: 4px;
   background: var(--surface-node);
   border: 1px solid var(--border-subtle); border-radius: 6px;
-  box-shadow: 0 10px 28px oklch(0% 0 0 / .45);
+  box-shadow: 0 10px 28px rgba(13, 21, 38, .16);
 }
 .tp__menu button {
   display: flex; flex-direction: column; gap: 1px;
@@ -824,11 +840,225 @@ body {
   padding: 3px 10px;
   font: inherit;
   font-size: 11px;
-  color: var(--text-primary, #E4EDEA);
-  background: var(--surface-hover, #1d2a28);
-  border: 1px solid var(--border-subtle, #2b3a37);
+  color: var(--text-primary, #101828);
+  background: var(--surface-hover, #E9EEF5);
+  border: 1px solid var(--border-subtle, #DCE3ED);
   border-radius: 999px;
   cursor: pointer;
 }
-.tp__reveal:hover { border-color: var(--accent, #48C6BD); }
-.tp__reveal:focus-visible { outline: 2px solid var(--accent-warm, #E2B65C); outline-offset: 2px; }
+.tp__reveal:hover { border-color: var(--accent, #2F6BFF); }
+.tp__reveal:focus-visible { outline: 2px solid var(--accent-warm, #F0790B); outline-offset: 2px; }
+
+/* ======================================================================== *
+ *  The world
+ *
+ *  Everything in this block sits behind every scene and is never rebuilt
+ *  between them. That is the point. A film whose entire surface is replaced
+ *  at each cut is a slide deck however well each slide is animated, so the
+ *  background, the grid, the drifting marks and the progress line belong to
+ *  the film rather than to any scene inside it. timeline.js drives all of it
+ *  from the one master playhead, in finite tweens, so a headless render
+ *  produces the same frame at the same second.
+ * ======================================================================== */
+
+.world { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+
+/*
+ * Soft colour fields, drawn as radial gradients rather than as blurred shapes: a
+ * filter: blur on a 600px element costs real milliseconds on every one of the ~3,600
+ * frames an MP4 export renders, and the gradient is indistinguishable.
+ */
+.world__blob { position: absolute; border-radius: 50%; }
+.world__blob--a {
+  width: 940px; height: 940px; left: -240px; top: -420px;
+  background: radial-gradient(circle at 50% 50%,
+    color-mix(in oklab, var(--reel-accent) 24%, transparent) 0%,
+    color-mix(in oklab, var(--reel-accent) 8%, transparent) 42%, transparent 68%);
+}
+.world__blob--b {
+  width: 820px; height: 820px; right: -260px; bottom: -340px;
+  background: radial-gradient(circle at 50% 50%,
+    color-mix(in oklab, var(--reel-accent-2) 22%, transparent) 0%,
+    color-mix(in oklab, var(--reel-accent-2) 7%, transparent) 44%, transparent 70%);
+}
+.world__blob--c {
+  width: 700px; height: 700px; left: 46%; top: -300px;
+  background: radial-gradient(circle at 50% 50%,
+    color-mix(in oklab, var(--reel-accent-4) 18%, transparent) 0%,
+    color-mix(in oklab, var(--reel-accent-3) 6%, transparent) 46%, transparent 72%);
+}
+
+/* Masked to the middle, so the frame edges stay clean paper and the grid reads as
+   depth rather than as graph paper. */
+.world__grid {
+  position: absolute; inset: -140px;
+  background-image:
+    linear-gradient(to right, rgba(13, 21, 38, .05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(13, 21, 38, .05) 1px, transparent 1px);
+  background-size: 68px 68px;
+  -webkit-mask-image: radial-gradient(ellipse 78% 72% at 50% 46%, #000 24%, transparent 76%);
+  mask-image: radial-gradient(ellipse 78% 72% at 50% 46%, #000 24%, transparent 76%);
+}
+
+/* The same icons the scenes wear, far back and barely there, drifting for the whole
+   length of the film. They are what makes a pause between two scenes still look like
+   a frame of video. */
+.world__mote {
+  position: absolute; width: 64px; height: 64px; opacity: .085;
+  background-repeat: no-repeat; background-position: 50% 50%; background-size: contain;
+}
+
+.world__vignette {
+  position: absolute; inset: 0;
+  background: radial-gradient(132% 112% at 50% 44%, transparent 52%, rgba(13, 21, 38, .06) 100%);
+}
+
+/* ---------------------------------------------------------- the progress line */
+
+/*
+ * Burned into the frame, under everything, running the whole length of the film. It
+ * is the one element on screen that is provably still moving at every second, and it
+ * is what tells a viewer who joined at 0:40 that they are watching one piece rather
+ * than a queue of cards.
+ */
+.hud { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; pointer-events: none; }
+.hud__track { position: absolute; inset: 0; background: rgba(13, 21, 38, .07); }
+.hud__fill {
+  position: absolute; left: 0; top: 0; width: 100%; height: 100%;
+  transform-origin: 0% 50%;
+  background: linear-gradient(90deg,
+    var(--reel-accent), var(--reel-accent-4) 34%, var(--reel-accent-3) 62%, var(--reel-accent-2));
+}
+/* One notch per scene, so the line doubles as the film's own chapter list. */
+.hud__tick { position: absolute; top: 0; width: 2px; height: 100%; background: var(--reel-bg); }
+
+/* ======================================================================== *
+ *  Icons
+ *
+ *  Sixteen flat SVGs carried as data URIs in runtime/icons.js and painted as
+ *  background-image, never injected as markup, so ids inside sixteen separate
+ *  documents can never collide. The disc under each one carries that icon's
+ *  own dominant colour, which is what keeps a row of six reading as colour.
+ * ======================================================================== */
+
+.ic {
+  position: relative; flex: 0 0 auto;
+  display: grid; place-items: center;
+  width: var(--ic-size, 46px); height: var(--ic-size, 46px);
+  border-radius: 28%;
+  background: color-mix(in oklab, var(--ic-tint, #2F6BFF) 13%, #FFFFFF);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--ic-tint, #2F6BFF) 26%, transparent);
+  transform-origin: 50% 50%;
+}
+.ic__art {
+  width: 66%; height: 66%;
+  background-repeat: no-repeat; background-position: 50% 50%; background-size: contain;
+}
+/* On the flow rail the icon replaces the node dot, so it has to punch a hole through
+   the wire running behind it. */
+.ic--round { border-radius: 50%; background: #FFFFFF;
+  box-shadow: 0 0 0 3px var(--reel-bg), inset 0 0 0 2px color-mix(in oklab, var(--ic-tint, #2F6BFF) 45%, transparent); }
+.ic--plain { background: transparent; box-shadow: none; }
+.ic--plain .ic__art { width: 100%; height: 100%; }
+
+/* ======================================================================== *
+ *  Colour rotation
+ *
+ *  Four accents cycling across a set, rather than one accent repeated. Every
+ *  card in a row wearing the same stripe is the visual signature of a
+ *  template; four hues in sequence is the signature of something designed.
+ * ======================================================================== */
+
+.sg__cell, .cc__card, .al__layer, .jr__step, .ft__node { --cell: var(--reel-accent); }
+.sg__cell:nth-child(4n+2), .cc__card:nth-child(4n+2),
+.al__layer:nth-child(4n+2), .jr__step:nth-child(4n+2), .ft__node:nth-child(4n+2) { --cell: var(--reel-accent-2); }
+.sg__cell:nth-child(4n+3), .cc__card:nth-child(4n+3),
+.al__layer:nth-child(4n+3), .jr__step:nth-child(4n+3), .ft__node:nth-child(4n+3) { --cell: var(--reel-accent-3); }
+.sg__cell:nth-child(4n+4), .cc__card:nth-child(4n+4),
+.al__layer:nth-child(4n+4), .jr__step:nth-child(4n+4), .ft__node:nth-child(4n+4) { --cell: var(--reel-accent-4); }
+
+.sg__bar { background: linear-gradient(90deg, var(--cell), color-mix(in oklab, var(--cell) 40%, #FFFFFF)); }
+.cc__bar { background: linear-gradient(90deg, var(--cell), color-mix(in oklab, var(--cell) 40%, #FFFFFF)); }
+.al__layer { border-left-color: var(--cell); }
+.jr__badge { border-color: var(--cell); color: var(--cell); }
+
+/* ======================================================================== *
+ *  Where the icons sit
+ * ======================================================================== */
+
+/* title and outro: one large mark, replacing the ring and dot that were there. */
+.ti__top { align-items: center; }
+.ti__mark { width: 64px; height: 64px; --ic-size: 64px; }
+.ou__mark { width: 92px; height: 92px; }
+/* Stacked in the same grid cell as the ring, so the ring pulses around it. */
+.ou__mark .ic { grid-area: 1 / 1; --ic-size: 62px; }
+
+/* big-statement: a large mark holding the left of the frame, beside the full height
+   bar and the sentence. */
+.bs__mid > .ic { --ic-size: 104px; align-self: center; }
+
+/* stat-grid: one per tile. It leads the tile in a column layout and sits before the
+   digits in a row one, which is what the flex-direction switch above already decides. */
+.sg__cell .ic { --ic-size: 64px; }
+.sg__grid[data-cols="3"] .sg__cell .ic { --ic-size: 46px; }
+.sg__grid[data-shape="text"] .sg__cell .ic { --ic-size: 44px; }
+
+/* capability-cards: the icon is the first thing in the card and the largest. */
+.cc__top .ic { --ic-size: 54px; }
+.cc__row[data-cols="3"] .cc__top .ic { --ic-size: 44px; }
+
+/* arch-layers: one per band, in front of the number. */
+.al__head .ic { --ic-size: 42px; }
+.al__stack[data-count="5"] .al__head .ic, .al__stack[data-count="6"] .al__head .ic { --ic-size: 30px; }
+
+/* journey: the icon is the badge. The number stays, small, in the corner of it. */
+.jr__step .ic { --ic-size: 54px; }
+.jr__track[data-count="7"] .jr__step .ic, .jr__track[data-count="8"] .jr__step .ic { --ic-size: 42px; }
+/*
+ * The padding is not decoration, it is what keeps the badge inside the mark's own box.
+ * Hung outside it on a negative offset the badge overflowed by 6px, the fit pass read
+ * that as clipped content, and since no amount of shrinking text can pull an absolutely
+ * positioned badge back inside, it trimmed every step's copy down to a single word.
+ */
+.jr__mark { position: relative; flex: 0 0 auto; display: grid; place-items: center; padding: 0 7px 7px 0; }
+.jr__mark .jr__badge {
+  position: absolute; right: 0; bottom: 0;
+  flex: none; width: 22px; height: 22px; font-size: 13px;
+  background: #FFFFFF; box-shadow: var(--reel-shadow);
+}
+.jr__track[data-count="7"] .jr__mark .jr__badge,
+.jr__track[data-count="8"] .jr__mark .jr__badge { width: 19px; height: 19px; font-size: 11px; }
+
+/* flow-trace: the icon is the node on the rail, stacked with the halo that expands
+   out of it each time the packet arrives. */
+.ft__mark { width: 60px; height: 60px; }
+.ft__mark .ic { grid-area: 1 / 1; --ic-size: 54px; }
+.ft__track[data-count="5"] .ft__mark .ic, .ft__track[data-count="6"] .ft__mark .ic { --ic-size: 44px; }
+
+/* ======================================================================== *
+ *  Light-stage adjustments to what was designed against near-black
+ * ======================================================================== */
+
+.scene { transform-origin: 50% 50%; }
+
+/* The dot is only built when icons are unavailable, so it keeps its own styling and
+   is simply never seen otherwise. */
+.ft__halo { grid-area: 1 / 1; border-color: var(--cell); width: 54px; height: 54px; }
+.ft__wire { height: 3px; top: calc(50% - 1.5px);
+  background: linear-gradient(90deg, var(--reel-accent), var(--reel-accent-4)); opacity: .8; }
+.ft__packet { background: var(--reel-accent-2); box-shadow: 0 0 0 5px color-mix(in oklab, var(--reel-accent-2) 22%, transparent); }
+
+.jr__badge { background: #FFFFFF; }
+.jr__pip { box-shadow: 0 0 0 5px color-mix(in oklab, var(--reel-accent-2) 20%, transparent); }
+
+.ti__ring, .ou__ring { border-color: color-mix(in oklab, var(--reel-accent) 55%, transparent); }
+
+/* ======================================================================== *
+ *  The picker, which is plugin chrome rather than film
+ * ======================================================================== */
+
+.cut { display: grid; grid-template-columns: auto 1fr; column-gap: 14px; align-items: start; }
+.cut .ic { --ic-size: 38px; grid-row: 1 / span 4; align-self: center; }
+.cut > :not(.ic) { grid-column: 2; }
+.cut { box-shadow: 0 1px 2px rgba(13, 21, 38, .04); }
+.cut:hover { box-shadow: 0 2px 10px rgba(13, 21, 38, .08); }

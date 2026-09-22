@@ -45,7 +45,24 @@ window.NexusReel = (function () {
     dom.exportMenu = byId('tp-export-menu');
     dom.exportMp4 = dom.exportMenu ? dom.exportMenu.querySelector('[data-format="mp4"]') : null;
     dom.exportMp4Why = byId('tp-export-mp4-why');
+    markPicker();
     wire();
+  }
+
+  /*
+   * The two buttons on the picker wear icons from the same set the film uses, so the
+   * panel and the thing it produces look like one product rather than two.
+   *
+   * Picked by name rather than by keyword: these two labels are ours and they never
+   * change, unlike everything inside a film.
+   */
+  function markPicker() {
+    if (!window.ReelIcons) return;
+    [['cut-technical', 'toolbox'], ['cut-stakeholder', 'target']].forEach(function (pair) {
+      var button = byId(pair[0]);
+      if (!button || button.querySelector('.ic')) return;
+      button.insertBefore(window.ReelIcons.el(null, pair[1]), button.firstChild);
+    });
   }
 
   function clock(seconds) {
@@ -423,6 +440,15 @@ window.NexusReel = (function () {
     setMode('paused');
     note('');
   }
+
+  /*
+   * The picker is the first thing anyone sees, and cacheDom only runs when a film
+   * starts or stops, by which point the picker is hidden. So this runs at load.
+   *
+   * Safe in the standalone export too, which inlines this file but builds a cover
+   * instead of a picker: markPicker finds no buttons and does nothing.
+   */
+  markPicker();
 
   return {
     play: play,

@@ -50,7 +50,7 @@ object CompositionWriter {
      * Scene builders and the timeline, in dependency order. Listed rather than
      * discovered because a classloader cannot list a directory inside a jar.
      */
-    private val FILM_SCRIPTS = listOf("runtime/scenes.js", "runtime/timeline.js")
+    private val FILM_SCRIPTS = listOf("runtime/icons.js", "runtime/scenes.js", "runtime/timeline.js")
 
     /** The transport. Only the standalone file needs it, a headless render has no UI. */
     private val PLAYER_SCRIPTS = listOf("runtime/player.js")
@@ -168,6 +168,7 @@ object CompositionWriter {
             mount,
             audioTags(clips, inline = false),
             "<script src=\"assets/gsap.min.js\"></script>",
+            "<script src=\"assets/icons.js\"></script>",
             "<script src=\"assets/scenes.js\"></script>",
             "<script src=\"assets/timeline.js\"></script>",
             "<script>",
