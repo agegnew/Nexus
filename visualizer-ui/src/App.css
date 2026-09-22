@@ -187,89 +187,231 @@
   container-type: inline-size;
   position: relative;
   min-height: 0;
-  overflow: hidden;
   background-color: oklch(13.5% 0.012 185);
-  background-image:
-    linear-gradient(color-mix(in oklch, var(--border-subtle) 36%, transparent) 1px, transparent 1px),
-    linear-gradient(90deg, color-mix(in oklch, var(--border-subtle) 36%, transparent) 1px, transparent 1px);
-  background-size: 32px 32px;
 }
 
-.architecture-scroll {
+/* --- dashed project boundary, drawn behind everything ------------------- */
+
+.arch-boundary {
   width: 100%;
   height: 100%;
-  overflow: auto;
   box-sizing: border-box;
-  padding: 104px clamp(40px, 6vw, 96px) 96px;
-  scrollbar-color: var(--border-subtle) transparent;
+  border: 1px dashed color-mix(in oklch, var(--frontend) 42%, var(--border-subtle));
+  border-radius: 10px;
+  background: oklch(16% 0.012 185 / 0.4);
 }
 
-.architecture-diagram {
-  min-width: 820px;
-  min-height: 100%;
-  transition: width 180ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.architecture-diagram svg {
-  display: block;
-  width: 100%;
-  height: auto;
-  min-height: 520px;
-  margin: 0 auto;
-  filter: drop-shadow(0 24px 48px oklch(5% 0.01 185 / 0.28));
-}
-
-.architecture-diagram .cluster rect {
-  fill: oklch(17% 0.012 185 / 0.82) !important;
-  stroke: oklch(38% 0.02 185) !important;
-  stroke-width: 1px !important;
-  rx: 8px;
-  ry: 8px;
-}
-
-.architecture-diagram .cluster .cluster rect {
-  fill: oklch(20% 0.014 185 / 0.74) !important;
-  stroke: oklch(43% 0.02 185) !important;
-  stroke-dasharray: 4 4;
-}
-
-.architecture-diagram .cluster-label text {
-  fill: var(--text-primary) !important;
-  font-size: 13px !important;
-  font-weight: 700 !important;
-  letter-spacing: 0.015em;
-}
-
-.architecture-diagram .nodeLabel {
-  font-weight: 620;
-  line-height: 1.5;
-}
-
-.architecture-diagram .flowchart-link {
-  stroke-width: 1.7px;
-}
-
-.architecture-diagram marker path {
-  fill: var(--text-secondary) !important;
-  stroke: var(--text-secondary) !important;
-}
-
-.architecture-diagram .edgeLabel text {
-  fill: var(--text-primary) !important;
-  font-size: 12px !important;
-  font-weight: 560 !important;
-}
-
-.architecture-diagram .edgeLabel rect {
-  fill: oklch(13.5% 0.012 185) !important;
-  opacity: 0.94 !important;
-  rx: 4px;
-  ry: 4px;
-}
-
-.architecture-heading {
+.arch-boundary__label {
   position: absolute;
-  z-index: 3;
+  top: -9px;
+  left: 18px;
+  padding: 0 var(--space-sm);
+  color: var(--text-secondary);
+  background: oklch(13.5% 0.012 185);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+/* --- labelled group boxes ----------------------------------------------- */
+
+.arch-group {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  padding: var(--space-md) var(--space-md) var(--space-lg);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: oklch(17.5% 0.012 185 / 0.9);
+}
+
+.arch-group--frontend { border-color: color-mix(in oklch, var(--frontend) 34%, var(--border-subtle)); }
+.arch-group--backend { border-color: color-mix(in oklch, var(--backend) 34%, var(--border-subtle)); }
+.arch-group--unmatched { border-color: color-mix(in oklch, var(--unmatched) 34%, var(--border-subtle)); }
+
+.arch-group__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+
+.arch-group__header strong {
+  color: var(--text-primary);
+  font-size: 0.8125rem;
+  font-weight: 650;
+  letter-spacing: -0.005em;
+}
+
+.arch-group__header small {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+  font-size: 0.6875rem;
+}
+
+.arch-group__footnote {
+  position: absolute;
+  bottom: var(--space-xs);
+  left: var(--space-md);
+  color: var(--text-muted);
+  font-size: 0.625rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.arch-group__empty {
+  margin: var(--space-md) 0 0;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+/* --- external actor ------------------------------------------------------ */
+
+.arch-actor {
+  display: grid;
+  align-content: center;
+  gap: 2px;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  padding: 0 var(--space-md);
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: var(--surface-node);
+  text-align: center;
+}
+
+.arch-actor strong { color: var(--text-primary); font-size: 0.8125rem; font-weight: 620; }
+.arch-actor small { color: var(--text-muted); font-size: 0.6875rem; }
+
+/* --- component cards ----------------------------------------------------- */
+
+.arch-card {
+  display: grid;
+  align-content: center;
+  gap: 3px;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  padding: 0 var(--space-md);
+  border: 1px solid var(--border-subtle);
+  border-left-width: 3px;
+  border-radius: 6px;
+  background: var(--surface-node);
+  box-shadow: 0 1px 2px oklch(6% 0.01 185 / 0.4);
+}
+
+.arch-card--frontend { border-left-color: var(--frontend); }
+.arch-card--backend { border-left-color: var(--backend); }
+.arch-card--unmatched { border-left-color: var(--unmatched); }
+
+.arch-card__row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.arch-card__row strong {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 0.8125rem;
+  font-weight: 620;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.arch-card__count {
+  flex: 0 0 auto;
+  min-width: 18px;
+  margin-left: auto;
+  padding: 1px 6px;
+  border-radius: 999px;
+  color: var(--text-secondary);
+  background: var(--surface-hover);
+  font-size: 0.625rem;
+  font-weight: 650;
+  text-align: center;
+}
+
+.arch-card__route {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-family: var(--font-code);
+  font-size: 0.75rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.arch-card__path,
+.arch-card__handler {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-family: var(--font-code);
+  font-size: 0.6875rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.arch-card__line { color: var(--text-secondary); }
+
+.arch-method {
+  flex: 0 0 auto;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: var(--surface-hover);
+  font-family: var(--font-code);
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.arch-method--get { color: var(--frontend); }
+.arch-method--post { color: oklch(76% 0.15 145); }
+.arch-method--put,
+.arch-method--patch { color: var(--project); }
+.arch-method--delete { color: var(--unmatched); }
+
+/* --- edges and handles --------------------------------------------------- */
+
+.arch-handle {
+  width: 1px;
+  height: 1px;
+  min-width: 0;
+  min-height: 0;
+  border: 0;
+  opacity: 0;
+}
+
+.architecture-workspace .arch-edge .react-flow__edge-path {
+  stroke: color-mix(in oklch, var(--text-muted) 70%, transparent);
+  stroke-width: 1.4px;
+}
+
+.architecture-workspace .arch-edge--unresolved .react-flow__edge-path {
+  stroke: color-mix(in oklch, var(--unmatched) 62%, transparent);
+  stroke-dasharray: 5 4;
+}
+
+.architecture-workspace .arch-edge .react-flow__edge-text {
+  fill: var(--text-secondary);
+  font-family: var(--font-code);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.architecture-workspace .react-flow__arrowhead * {
+  fill: color-mix(in oklch, var(--text-muted) 70%, transparent);
+  stroke: none;
+}
+
+/* --- overlays ------------------------------------------------------------ */
+
+.arch-heading {
+  position: absolute;
+  z-index: 5;
   top: var(--space-lg);
   left: var(--space-lg);
   display: grid;
@@ -281,7 +423,7 @@
   box-shadow: 0 10px 28px oklch(6% 0.01 185 / 0.28);
 }
 
-.architecture-heading span {
+.arch-heading span {
   color: var(--project);
   font-size: 0.625rem;
   font-weight: 720;
@@ -289,326 +431,32 @@
   text-transform: uppercase;
 }
 
-.architecture-heading strong {
-  font-size: 0.8125rem;
-  font-weight: 620;
-}
+.arch-heading strong { font-size: 0.8125rem; font-weight: 620; }
+.arch-heading small { color: var(--text-muted); font-size: 0.6875rem; }
 
-.architecture-toolbar {
+.arch-key {
   position: absolute;
-  z-index: 3;
-  top: var(--space-lg);
+  z-index: 5;
   right: var(--space-lg);
-  display: flex;
-  overflow: hidden;
-  border: 1px solid var(--border-subtle);
-  border-radius: 6px;
-  background: oklch(18% 0.012 185 / 0.94);
-  box-shadow: 0 10px 28px oklch(6% 0.01 185 / 0.28);
-}
-
-.architecture-toolbar button {
-  min-width: 34px;
-  height: 32px;
-  padding: 0 var(--space-sm);
-  border: 0;
-  border-right: 1px solid var(--border-subtle);
-  color: var(--text-primary);
-  background: transparent;
-  cursor: pointer;
-  font-size: 0.75rem;
-}
-
-.architecture-toolbar button:last-child { border-right: 0; }
-.architecture-toolbar button:hover { background: var(--surface-hover); }
-.architecture-toolbar button:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
-
-.architecture-key {
-  position: absolute;
-  left: 50%;
   bottom: var(--space-lg);
   display: flex;
-  align-items: center;
   gap: var(--space-lg);
   padding: var(--space-sm) var(--space-md);
   border: 1px solid var(--border-subtle);
   border-radius: 6px;
-  color: var(--text-secondary);
   background: oklch(18% 0.012 185 / 0.94);
-  box-shadow: 0 10px 28px oklch(6% 0.01 185 / 0.28);
-  font-size: 0.6875rem;
-  transform: translateX(-50%);
-}
-
-.architecture-key span { display: inline-flex; align-items: center; gap: 6px; }
-.architecture-key i { width: 8px; height: 8px; border-radius: 2px; }
-.architecture-key__frontend { background: var(--frontend); }
-.architecture-key__api { background: var(--project); }
-.architecture-key__backend { background: var(--backend); }
-.architecture-key__unresolved { background: var(--unmatched); }
-
-.architecture-error {
-  display: grid;
-  max-width: 520px;
-  gap: var(--space-sm);
-  margin: 10vh auto 0;
-  padding: var(--space-xl);
-  border: 1px solid color-mix(in oklch, var(--unmatched) 55%, var(--border-subtle));
-  border-radius: 5px;
-  color: var(--text-primary);
-  background: var(--surface-raised);
-}
-
-.architecture-error span { color: var(--text-secondary); font-size: 0.75rem; line-height: 1.6; }
-
-@container (max-width: 720px) {
-  .architecture-scroll { padding: 104px 32px 88px; }
-  .architecture-heading strong { display: none; }
-  .architecture-key { display: none; }
-}
-
-.architecture-scroll {
-  display: grid;
-  padding: 88px 32px 80px;
-  place-items: center;
-}
-
-.architecture-map-frame {
-  position: relative;
-  flex: 0 0 auto;
-}
-
-.architecture-map {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 1000px;
-  height: 620px;
-  transform-origin: top left;
-}
-
-.architecture-boundary {
-  position: absolute;
-  z-index: 0;
-  top: 150px;
-  left: 30px;
-  width: 940px;
-  height: 420px;
-  box-sizing: border-box;
-  border: 1px solid oklch(46% 0.025 185);
-  border-radius: 10px;
-  background: oklch(16.5% 0.013 185 / 0.74);
-}
-
-.architecture-boundary__label {
-  position: absolute;
-  top: -14px;
-  left: 18px;
-  padding: 4px 9px;
-  color: var(--text-primary);
-  background: oklch(13.5% 0.012 185);
-  font-size: 12px;
-  font-weight: 680;
-  letter-spacing: 0.015em;
-}
-
-.architecture-zone {
-  position: absolute;
-  z-index: 1;
-  top: 190px;
-  width: 250px;
-  height: 330px;
-  box-sizing: border-box;
-  border: 1px solid oklch(37% 0.018 185);
-  border-radius: 7px;
-  background: oklch(19% 0.014 185 / 0.82);
-}
-
-.architecture-zone--client { left: 50px; }
-.architecture-zone--interface { left: 375px; }
-.architecture-zone--services { left: 700px; }
-
-.architecture-zone header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 14px 16px;
-  border-bottom: 1px solid oklch(34% 0.016 185);
-}
-
-.architecture-zone header > span {
-  color: var(--text-muted);
-  font-family: var(--font-code);
-  font-size: 10px;
-}
-
-.architecture-zone header div {
-  display: grid;
-  gap: 2px;
-}
-
-.architecture-zone header strong {
-  font-size: 13px;
-  font-weight: 680;
-}
-
-.architecture-zone header small {
-  color: var(--text-muted);
-  font-size: 10px;
-}
-
-.architecture-component,
-.architecture-external {
-  position: absolute;
-  z-index: 4;
-  display: grid;
-  box-sizing: border-box;
-  align-content: center;
-  gap: 3px;
-  min-height: 78px;
-  padding: 12px 16px;
-  border: 2px solid;
-  color: var(--text-primary);
-  background: oklch(22% 0.018 185);
-  box-shadow: 0 12px 24px oklch(7% 0.01 185 / 0.32);
-  text-align: left;
-}
-
-.architecture-component strong,
-.architecture-external strong {
-  overflow: hidden;
-  font-size: 15px;
-  font-weight: 700;
-  line-height: 1.25;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.architecture-component small,
-.architecture-external small {
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: 0.6875rem;
 }
 
-.architecture-component__type {
-  font-size: 9px;
-  font-weight: 750;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-}
+.arch-key span { display: inline-flex; align-items: center; gap: 6px; }
+.arch-key i { width: 8px; height: 8px; border-radius: 2px; }
+.arch-key__frontend { background: var(--frontend); }
+.arch-key__backend { background: var(--backend); }
+.arch-key__unmatched { background: var(--unmatched); }
 
-.architecture-component--frontend {
-  top: 311px;
-  left: 100px;
-  width: 176px;
-  border-color: var(--frontend);
-  border-radius: 40px;
-  background: oklch(24% 0.035 185);
-}
-
-.architecture-component--frontend .architecture-component__type { color: var(--frontend); }
-
-.architecture-component--api {
-  top: 311px;
-  left: 419px;
-  width: 162px;
-  border-color: var(--project);
-  border-radius: 5px;
-  background: oklch(25% 0.035 95);
-}
-
-.architecture-component--api::before,
-.architecture-component--api::after {
-  position: absolute;
-  top: 50%;
-  width: 10px;
-  height: 10px;
-  border: solid var(--project);
-  background: oklch(25% 0.035 95);
-  content: '';
-  transform: translateY(-50%) rotate(45deg);
-}
-
-.architecture-component--api::before { left: -7px; border-width: 0 0 2px 2px; }
-.architecture-component--api::after { right: -7px; border-width: 2px 2px 0 0; }
-.architecture-component--api .architecture-component__type { color: var(--project); }
-
-.architecture-service-list {
-  position: absolute;
-  z-index: 4;
-  inset: 0;
-  pointer-events: none;
-}
-
-.architecture-component--service {
-  left: 724px;
-  width: 202px;
-  border-color: var(--backend);
-  border-radius: 5px;
-  background: oklch(24% 0.035 305);
-}
-
-.architecture-component--service .architecture-component__type { color: var(--backend); }
-.architecture-component--empty { top: 311px; }
-
-.architecture-external {
-  top: 56px;
-  left: 718px;
-  width: 240px;
-  min-height: 76px;
-  border-color: var(--unmatched);
-  border-radius: 5px;
-  background: oklch(24% 0.035 30);
-}
-
-.architecture-external .architecture-component__type { color: var(--unmatched); }
-
-.architecture-connections {
-  position: absolute;
-  z-index: 3;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  overflow: visible;
-  pointer-events: none;
-}
-
-.architecture-connection {
-  fill: none;
-  stroke: oklch(68% 0.025 185);
-  stroke-width: 1.5;
-}
-
-.architecture-connection--unresolved {
-  stroke: color-mix(in oklch, var(--unmatched) 72%, var(--text-muted));
-  stroke-dasharray: 6 5;
-}
-
-#architecture-arrow path { fill: oklch(68% 0.025 185); }
-#architecture-arrow-muted path { fill: var(--unmatched); }
-
-.architecture-connection-label rect {
-  fill: oklch(14% 0.012 185);
-  stroke: oklch(34% 0.016 185);
-  stroke-width: 1;
-}
-
-.architecture-connection-label text {
-  fill: var(--text-secondary);
-  font-family: var(--font-ui);
-  font-size: 10px;
-  font-weight: 600;
-}
-
-.architecture-connection-label--unresolved rect {
-  stroke: color-mix(in oklch, var(--unmatched) 50%, var(--border-subtle));
-}
-
-@container (max-width: 720px) {
-  .architecture-scroll {
-    display: block;
-    padding: 88px 24px 48px;
-  }
+@container (max-width: 640px) {
+  .arch-key { display: none; }
 }
 
 .react-flow__node-tree {
