@@ -37,6 +37,32 @@
              missing, but then the user cannot turn them down in Settings. -->
         <notificationGroup id="Nexus Reel" displayType="BALLOON"/>
 
+        <!-- Trust light: the reading for the file in front of you, and the switch for the
+             paint. Everything it needs lives under com.example.trust, so this feature adds
+             files rather than editing anyone else's. -->
+        <statusBarWidgetFactory
+                id="com.example.trust.widget"
+                implementation="com.example.trust.TrustWidgetFactory"
+                order="before positionWidget"/>
+
     </extensions>
+
+    <projectListeners>
+        <!-- Repaints the wash when a file is opened or brought to the front. Stateless, as
+             declarative listeners must be: the state is in the TrustService. -->
+        <listener
+                class="com.example.trust.TrustEditorListener"
+                topic="com.intellij.openapi.fileEditor.FileEditorManagerListener"/>
+    </projectListeners>
+
+    <actions>
+        <action
+                id="com.example.trust.toggle"
+                class="com.example.trust.TrustToggleAction"
+                text="Show Code That Has Never Run"
+                description="Paint the lines in this project that no run has ever executed">
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+        </action>
+    </actions>
 
 </idea-plugin>
