@@ -297,12 +297,6 @@ export default function App() {
     })
   }, [])
 
-  const fitMeasuredTree = useCallback(() => {
-    window.requestAnimationFrame(() => {
-      flowInstance?.fitView({ padding: 0.22, duration: 420, maxZoom: 1.05 })
-    })
-  }, [flowInstance])
-
   const collapseAll = useCallback(() => setExpandedIds(new Set([ROOT_ID])), [])
 
   const selectDemo = useCallback((fixtureId) => {
@@ -377,7 +371,6 @@ export default function App() {
           edges={tree.edges}
           nodeTypes={nodeTypes}
           onInit={setFlowInstance}
-          onNodesInitialized={fitMeasuredTree}
           onNodeClick={handleNodeClick}
           nodesDraggable={false}
           nodesConnectable={false}
@@ -433,7 +426,7 @@ export default function App() {
       {activeView === 'architecture' && !isReady && (
         <section className="architecture-workspace" aria-label="System architecture diagram">
           <div className="analysis-state" role="status">
-            <strong>{analysis?.status === 'error' ? 'Analysis failed' : 'Architecture is not ready'}</strong>
+            <strong>{analysis?.status === 'error' ? 'Analysis failed' : 'Nothing to map yet'}</strong>
             <span>{analysis?.message ?? 'Reading detected services and API relationships.'}</span>
           </div>
         </section>

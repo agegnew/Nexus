@@ -24,17 +24,17 @@ function ArchGroup({ data }) {
   return (
     <div className={`arch-group arch-group--${data.tone}`}>
       <Handle type="target" position={Position.Left} className="arch-handle" />
+      <Handle type="target" position={Position.Top} id="top" className="arch-handle" />
+      <Handle type="source" position={Position.Right} id="right" className="arch-handle" />
+      <Handle type="source" position={Position.Bottom} id="bottom" className="arch-handle" />
       <header className="arch-group__header">
         {data.technology && (
           <Glyph name={glyphForTechnology(data.technology)} className="arch-group__icon" />
         )}
-        <span className="arch-group__title">
-          <strong>{data.title}</strong>
-          <small>{data.caption}</small>
-        </span>
+        <strong>{data.title}</strong>
+        <small>{data.caption}</small>
       </header>
-      {data.empty && <p className="arch-group__empty">Nothing detected</p>}
-      <span className="arch-group__footnote">{data.footnote}</span>
+      {data.empty && <p className="arch-group__empty">Nothing found yet</p>}
     </div>
   )
 }
@@ -54,23 +54,19 @@ function ArchActor({ data }) {
 
 function ArchModule({ data }) {
   return (
-    <figure className="arch-figure arch-figure--module" title={data.path}>
+    <figure className="arch-figure arch-figure--row" title={data.path}>
       <Glyph name="module" className="arch-figure__icon" />
-      {data.callCount > 1 && <span className="arch-figure__badge">{data.callCount}</span>}
       <figcaption>
         <strong>{data.name}</strong>
         <small>{data.directory}</small>
       </figcaption>
-      <Handle type="source" position={Position.Right} className="arch-handle" />
     </figure>
   )
 }
 
 function ArchRoute({ data }) {
-  const location = data.filePath ? `${data.filePath}:${data.line}` : data.path
-
   return (
-    <figure className="arch-figure arch-figure--route" title={location}>
+    <figure className="arch-figure arch-figure--row" title={data.filePath ? `${data.filePath}:${data.line}` : data.path}>
       <Handle type="target" position={Position.Left} className="arch-handle" />
       <Glyph name={glyphForRoute(data.technology)} className="arch-figure__icon" />
       <figcaption>
@@ -86,7 +82,7 @@ function ArchRoute({ data }) {
 
 function ArchExternal({ data }) {
   return (
-    <figure className="arch-figure arch-figure--external" title={data.path}>
+    <figure className="arch-figure arch-figure--row" title={data.path}>
       <Handle type="target" position={Position.Left} className="arch-handle" />
       <Glyph name="external" className="arch-figure__icon" />
       <figcaption>
@@ -94,7 +90,7 @@ function ArchExternal({ data }) {
           <b className={`arch-method arch-method--${data.method.toLowerCase()}`}>{data.method}</b>
           <code>{data.path}</code>
         </span>
-        <small>No backend match</small>
+        <small>called from {data.caller}</small>
       </figcaption>
     </figure>
   )
@@ -109,11 +105,7 @@ const nodeTypes = {
   archExternal: memo(ArchExternal),
 }
 
-const FIT_OPTIONS = { padding: 0.12, maxZoom: 1 }
-
-function plural(count, singular, multiple = `${singular}s`) {
-  return `${count} ${count === 1 ? singular : multiple}`
-}
+const FIT_OPTIONS = { padding: 0.1, maxZoom: 1 }
 
 export default function ArchitectureDiagram({ analysis }) {
   const [flowInstance, setFlowInstance] = useState(null)
@@ -122,12 +114,9 @@ export default function ArchitectureDiagram({ analysis }) {
   const styledEdges = useMemo(() => edges.map((edge) => ({
     ...edge,
     type: 'smoothstep',
-    pathOptions: { borderRadius: 14 },
+    pathOptions: { borderRadius: 12 },
     className: `arch-edge${edge.data?.unresolved ? ' arch-edge--unresolved' : ''}`,
-    labelBgPadding: [6, 3],
-    labelBgBorderRadius: 3,
-    labelBgStyle: { fill: '#ffffff', fillOpacity: 0.92 },
-    markerEnd: { type: MarkerType.ArrowClosed, width: 15, height: 15, color: '#2b3340' },
+    markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14 },
   })), [edges])
 
   const fit = useCallback(() => {
@@ -138,40 +127,29 @@ export default function ArchitectureDiagram({ analysis }) {
 
   return (
     <section className="architecture-workspace" aria-label="System architecture diagram">
-      <div className="arch-heading">
-        <span>System map</span>
-        <strong>{analysis.projectName}</strong>
-        <small>
-          {plural(summary.modules, 'client module')} · {plural(summary.routes, 'route')} ·{' '}
-          {plural(summary.services, 'service')}
-          {summary.externals > 0 ? ` · ${plural(summary.externals, 'unresolved call')}` : ''}
-        </small>
-      </div>
-
       <ReactFlow
         nodes={nodes}
         edges={styledEdges}
         nodeTypes={nodeTypes}
         onInit={setFlowInstance}
-        onNodesInitialized={fit}
         nodesDraggable={false}
         nodesConnectable={false}
         elementsSelectable={false}
         deleteKeyCode={null}
-        minZoom={0.15}
-        maxZoom={1.6}
+        minZoom={0.2}
+        maxZoom={1.8}
         fitView
         fitViewOptions={FIT_OPTIONS}
         proOptions={{ hideAttribution: true }}
       >
-        <Background variant={BackgroundVariant.Dots} color="#c9d2dd" gap={22} size={1.2} />
+        <Background variant={BackgroundVariant.Dots} color="oklch(30% 0.012 185)" gap={24} size={1.4} />
         <Controls position="bottom-left" showInteractive={false} />
       </ReactFlow>
 
-      <div className="arch-key" aria-label="Architecture legend">
-        <span><Glyph name="module" /> Client module</span>
-        <span><Glyph name="service" /> Route handler</span>
-        {summary.externals > 0 && <span><Glyph name="external" /> Unresolved</span>}
+      <div className="arch-key" aria-label="Legend">
+        <span><Glyph name="module" /> Source file</span>
+        <span><Glyph name="service" /> Route and handler</span>
+        {summary.externals > 0 && <span><Glyph name="external" /> No match found</span>}
       </div>
     </section>
   )

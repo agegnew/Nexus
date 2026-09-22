@@ -1,20 +1,24 @@
-// Turns a ProjectGraph into an absolutely positioned architecture diagram:
-// external actors outside a dashed project boundary, named components inside
-// labelled group boxes, and one labelled edge per detected call.
+// Turns a ProjectGraph into an absolutely positioned architecture diagram.
+//
+// Two rules keep it readable. Groups pack their contents into a grid so the
+// drawing stays wide and shallow instead of growing into one tall column, and
+// edges connect a module to a whole service rather than to each route, so the
+// arrows show how layers talk while the cards carry the detail.
 
-const ACTOR = { width: 150, height: 118 }
-const MODULE = { width: 182, height: 116 }
-const ROUTE = { width: 226, height: 130 }
-const EXTERNAL = { width: 196, height: 116 }
+const ACTOR = { width: 150, height: 96 }
+const MODULE = { width: 200, height: 66 }
+const ROUTE = { width: 248, height: 66 }
+const EXTERNAL = { width: 248, height: 66 }
 
 const GROUP_PAD_X = 18
-const GROUP_HEADER = 58
-const GROUP_PAD_BOTTOM = 30
-const ROW_GAP = 16
-const GROUP_GAP = 34
-const COLUMN_GAP = 150
-const BOUNDARY_PAD = 38
-const BOUNDARY_LABEL = 18
+const GROUP_HEADER = 52
+const GROUP_PAD_BOTTOM = 18
+const ROW_GAP = 14
+const CELL_GAP = 16
+const GROUP_GAP = 30
+const COLUMN_GAP = 128
+const BOUNDARY_PAD = 34
+const BOUNDARY_LABEL = 20
 
 const Z = { boundary: 0, group: 1, component: 2 }
 
@@ -27,20 +31,31 @@ function directory(path) {
   return cut < 0 ? 'Project root' : path.slice(0, cut)
 }
 
-function groupHeight(rowCount, rowHeight) {
-  if (rowCount === 0) return GROUP_HEADER + rowHeight + GROUP_PAD_BOTTOM
-  return GROUP_HEADER + rowCount * rowHeight + (rowCount - 1) * ROW_GAP + GROUP_PAD_BOTTOM
+// Keep groups closer to a landscape block than a stack.
+function columnsFor(count) {
+  if (count <= 3) return 1
+  if (count <= 8) return 2
+  return 3
 }
 
-// Routes keep their technology grouping, so modules are the only column free to
-// reorder. Sorting them by the mean y of what they call keeps the edges untangled.
-function barycentre(module, targetTops) {
-  const tops = module.targets.map((target) => targetTops.get(target.id)).filter((top) => top !== undefined)
-  if (tops.length === 0) return Number.MAX_SAFE_INTEGER
-  return tops.reduce((total, top) => total + top, 0) / tops.length
+function gridSize(count, item, columns) {
+  const rows = Math.max(1, Math.ceil(count / columns))
+  return {
+    width: columns * item.width + (columns - 1) * CELL_GAP + GROUP_PAD_X * 2,
+    height: GROUP_HEADER + rows * item.height + (rows - 1) * ROW_GAP + GROUP_PAD_BOTTOM,
+  }
 }
 
-function collectRoutes(analysis) {
+function cellPosition(index, item, columns, originX, originY) {
+  const row = Math.floor(index / columns)
+  const column = index % columns
+  return {
+    x: originX + GROUP_PAD_X + column * (item.width + CELL_GAP),
+    y: originY + GROUP_HEADER + row * (item.height + ROW_GAP),
+  }
+}
+
+function collectServices(analysis) {
   const byId = new Map(analysis.nodes.map((node) => [node.id, node]))
   const handledBy = new Map()
   analysis.edges.forEach((edge) => {
@@ -54,17 +69,16 @@ function collectRoutes(analysis) {
     const handler = handledBy.get(endpoint.id)
     const technology = endpoint.technology || handler?.technology || 'Backend'
     const [method, ...rest] = endpoint.label.split(' ')
-    const route = {
+    const group = groups.get(technology) ?? []
+    group.push({
       id: endpoint.id,
       method,
       path: rest.join(' ') || endpoint.label,
-      handler: handler?.label ?? 'Unresolved handler',
+      handler: handler?.label ?? 'No handler found',
       filePath: handler?.filePath ?? null,
       line: handler?.line ?? null,
       technology,
-    }
-    const group = groups.get(technology) ?? []
-    group.push(route)
+    })
     groups.set(technology, group)
   })
 
@@ -94,196 +108,128 @@ function collectModules(analysis) {
       name: fileName(path),
       directory: directory(path),
       callCount: 0,
-      targets: [],
+      // technology -> number of calls, so one edge can stand for many calls
+      reaches: new Map(),
+      unresolved: 0,
     }
     entry.callCount += 1
 
     const request = requests.get(call.id)
     const destination = request ? byId.get(request.target) : null
-    if (destination) {
-      const existing = entry.targets.find((target) => target.id === destination.id)
-      const method = request.label || 'HTTP'
-      if (existing) existing.methods.add(method)
-      else entry.targets.push({ id: destination.id, kind: destination.kind, methods: new Set([method]) })
+    if (destination?.kind === 'endpoint') {
+      const technology = destination.technology || 'Backend'
+      entry.reaches.set(technology, (entry.reaches.get(technology) ?? 0) + 1)
+    } else if (destination?.kind === 'unmatched') {
+      entry.unresolved += 1
     }
 
     modules.set(path, entry)
   })
 
-  return [...modules.values()]
+  return [...modules.values()].sort((left, right) => left.path.localeCompare(right.path))
 }
 
 function collectExternals(analysis) {
+  const byId = new Map(analysis.nodes.map((node) => [node.id, node]))
+  const origin = new Map()
+  analysis.edges.forEach((edge) => {
+    const source = byId.get(edge.source)
+    const target = byId.get(edge.target)
+    if (source?.kind === 'frontend' && target?.kind === 'unmatched') origin.set(target.id, source)
+  })
+
   return analysis.nodes.filter((node) => node.kind === 'unmatched').map((node) => {
     const [method, ...rest] = node.label.split(' ')
-    return { id: node.id, method, path: rest.join(' ') || node.label }
+    const caller = origin.get(node.id)
+    return {
+      id: node.id,
+      method,
+      path: rest.join(' ') || node.label,
+      // The card carries its caller so no edge has to cross the diagram to say it.
+      caller: caller?.filePath ? `${fileName(caller.filePath)}:${caller.line ?? '?'}` : 'Unknown caller',
+    }
   })
 }
 
 export function buildArchitecture(analysis) {
-  const routeGroups = collectRoutes(analysis)
+  const services = collectServices(analysis)
   const modules = collectModules(analysis)
   const externals = collectExternals(analysis)
 
   const nodes = []
   const edges = []
 
-  // --- column widths -------------------------------------------------------
-  const clientGroupWidth = MODULE.width + GROUP_PAD_X * 2
-  const serviceGroupWidth = ROUTE.width + GROUP_PAD_X * 2
-  const externalGroupWidth = EXTERNAL.width + GROUP_PAD_X * 2
+  // --- sizes ---------------------------------------------------------------
+  const routeColumns = columnsFor(Math.max(0, ...services.map((group) => group.routes.length)))
+  // Unresolved calls sit in one wide row under the boundary, not a tall stack.
+  const externalColumns = Math.min(Math.max(externals.length, 1), 3)
 
+  const moduleColumns = columnsFor(modules.length)
+  const clientSize = gridSize(Math.max(modules.length, 1), MODULE, moduleColumns)
+  const serviceSizes = services.map((group) => gridSize(group.routes.length, ROUTE, routeColumns))
+  const serviceWidth = Math.max(
+    gridSize(1, ROUTE, routeColumns).width,
+    ...serviceSizes.map((size) => size.width),
+  )
+  const serviceColumnHeight = serviceSizes.length > 0
+    ? serviceSizes.reduce((total, size) => total + size.height, 0) + (serviceSizes.length - 1) * GROUP_GAP
+    : gridSize(0, ROUTE, 1).height
+  const externalSize = gridSize(Math.max(externals.length, 1), EXTERNAL, externalColumns)
+
+  // --- columns -------------------------------------------------------------
   const actorX = 0
   const clientX = actorX + ACTOR.width + COLUMN_GAP
-  const serviceX = clientX + clientGroupWidth + COLUMN_GAP
-  const externalX = serviceX + serviceGroupWidth + COLUMN_GAP
+  const serviceX = clientX + clientSize.width + COLUMN_GAP
 
-  // --- column heights ------------------------------------------------------
-  const clientHeight = groupHeight(modules.length, MODULE.height)
-  const serviceHeights = routeGroups.map((group) => groupHeight(group.routes.length, ROUTE.height))
-  const serviceColumnHeight = serviceHeights.length > 0
-    ? serviceHeights.reduce((total, height) => total + height, 0) + (serviceHeights.length - 1) * GROUP_GAP
-    : groupHeight(0, ROUTE.height)
-  const externalHeight = groupHeight(externals.length, EXTERNAL.height)
+  const insideHeight = Math.max(clientSize.height, serviceColumnHeight)
+  const clientY = (insideHeight - clientSize.height) / 2
+  const serviceColumnY = (insideHeight - serviceColumnHeight) / 2
 
-  const contentHeight = Math.max(clientHeight, serviceColumnHeight)
-  const clientY = (contentHeight - clientHeight) / 2
-  const serviceColumnY = (contentHeight - serviceColumnHeight) / 2
-  const externalY = (contentHeight - externalHeight) / 2
-
-  // --- project boundary ----------------------------------------------------
+  // --- boundary ------------------------------------------------------------
   const boundaryX = clientX - BOUNDARY_PAD
-  const boundaryY = Math.min(clientY, serviceColumnY) - BOUNDARY_PAD - BOUNDARY_LABEL
-  const boundaryWidth = serviceX + serviceGroupWidth + BOUNDARY_PAD - boundaryX
-  const boundaryHeight = Math.max(clientY + clientHeight, serviceColumnY + serviceColumnHeight)
-    - Math.min(clientY, serviceColumnY) + BOUNDARY_PAD * 2 + BOUNDARY_LABEL
+  const boundaryY = -BOUNDARY_PAD
+  const boundaryWidth = serviceX + serviceWidth + BOUNDARY_PAD - boundaryX
+  const boundaryHeight = insideHeight + BOUNDARY_PAD * 2 + BOUNDARY_LABEL
 
   nodes.push({
     id: 'boundary',
     type: 'archBoundary',
     position: { x: boundaryX, y: boundaryY },
     style: { width: boundaryWidth, height: boundaryHeight },
-    data: { label: `${analysis.projectName} · application boundary` },
+    data: { label: analysis.projectName },
     zIndex: Z.boundary,
     draggable: false,
     selectable: false,
     focusable: false,
   })
 
+  // Unresolved work sits below the boundary, so its edge never crosses a service.
+  const externalY = boundaryY + boundaryHeight + GROUP_GAP + 16
+  // Sits under the client column so its edge drops almost straight down, and
+  // the bottom-right stays clear for the legend.
+  const externalX = clientX
+
   // --- client actor --------------------------------------------------------
   nodes.push({
     id: 'actor:client',
     type: 'archActor',
-    position: { x: actorX, y: clientY + clientHeight / 2 - ACTOR.height / 2 },
+    position: { x: actorX, y: clientY + clientSize.height / 2 - ACTOR.height / 2 },
     style: { width: ACTOR.width, height: ACTOR.height },
-    data: { label: 'Client apps', detail: 'Browser / consumer' },
+    data: { label: 'Client apps', detail: 'Browser' },
     zIndex: Z.component,
     draggable: false,
   })
 
-  // --- service groups, positioned first so modules can sort against them ----
-  const routeTops = new Map()
-  let cursor = serviceColumnY
-  routeGroups.forEach((group, index) => {
-    const height = serviceHeights[index]
-    nodes.push({
-      id: `group:service:${group.technology}`,
-      type: 'archGroup',
-      position: { x: serviceX, y: cursor },
-      style: { width: serviceGroupWidth, height },
-      data: {
-        tone: 'backend',
-        technology: group.technology,
-        title: group.technology,
-        caption: `${group.routes.length} ${group.routes.length === 1 ? 'route' : 'routes'}`,
-        footnote: 'Service',
-      },
-      zIndex: Z.group,
-      draggable: false,
-      selectable: false,
-      focusable: false,
-    })
-
-    group.routes.forEach((route, rowIndex) => {
-      const top = cursor + GROUP_HEADER + rowIndex * (ROUTE.height + ROW_GAP)
-      routeTops.set(route.id, top)
-      nodes.push({
-        id: route.id,
-        type: 'archRoute',
-        position: { x: serviceX + GROUP_PAD_X, y: top },
-        style: { width: ROUTE.width, height: ROUTE.height },
-        data: route,
-        zIndex: Z.component,
-        draggable: false,
-      })
-    })
-
-    cursor += height + GROUP_GAP
-  })
-
-  if (routeGroups.length === 0) {
-    nodes.push({
-      id: 'group:service:none',
-      type: 'archGroup',
-      position: { x: serviceX, y: serviceColumnY },
-      style: { width: serviceGroupWidth, height: serviceColumnHeight },
-      data: { tone: 'backend', title: 'Services', caption: 'none detected', footnote: 'Service', empty: true },
-      zIndex: Z.group,
-      draggable: false,
-      selectable: false,
-      focusable: false,
-    })
-  }
-
-  // --- external group ------------------------------------------------------
-  if (externals.length > 0) {
-    nodes.push({
-      id: 'group:external',
-      type: 'archGroup',
-      position: { x: externalX, y: externalY },
-      style: { width: externalGroupWidth, height: externalHeight },
-      data: {
-        tone: 'unmatched',
-        title: 'External / unresolved',
-        caption: `${externals.length} ${externals.length === 1 ? 'call' : 'calls'}`,
-        footnote: 'Outside project',
-      },
-      zIndex: Z.group,
-      draggable: false,
-      selectable: false,
-      focusable: false,
-    })
-
-    externals.forEach((external, index) => {
-      const top = externalY + GROUP_HEADER + index * (EXTERNAL.height + ROW_GAP)
-      routeTops.set(external.id, top)
-      nodes.push({
-        id: external.id,
-        type: 'archExternal',
-        position: { x: externalX + GROUP_PAD_X, y: top },
-        style: { width: EXTERNAL.width, height: EXTERNAL.height },
-        data: external,
-        zIndex: Z.component,
-        draggable: false,
-      })
-    })
-  }
-
-  // --- client group, ordered to reduce edge crossings ----------------------
-  const orderedModules = [...modules].sort((left, right) => (
-    barycentre(left, routeTops) - barycentre(right, routeTops) || left.path.localeCompare(right.path)
-  ))
-
+  // --- client modules ------------------------------------------------------
   nodes.push({
     id: 'group:client',
     type: 'archGroup',
     position: { x: clientX, y: clientY },
-    style: { width: clientGroupWidth, height: clientHeight },
+    style: { width: clientSize.width, height: clientSize.height },
     data: {
       tone: 'frontend',
-      title: 'Client modules',
-      caption: `${modules.length} ${modules.length === 1 ? 'source file' : 'source files'}`,
-      footnote: 'Namespace',
+      title: 'Client',
+      caption: modules.length === 1 ? '1 source file' : `${modules.length} source files`,
       empty: modules.length === 0,
     },
     zIndex: Z.group,
@@ -292,41 +238,150 @@ export function buildArchitecture(analysis) {
     focusable: false,
   })
 
-  orderedModules.forEach((module, index) => {
+  modules.forEach((module, index) => {
     nodes.push({
       id: module.id,
       type: 'archModule',
-      position: { x: clientX + GROUP_PAD_X, y: clientY + GROUP_HEADER + index * (MODULE.height + ROW_GAP) },
+      position: cellPosition(index, MODULE, moduleColumns, clientX, clientY),
       style: { width: MODULE.width, height: MODULE.height },
-      data: module,
+      data: {
+        path: module.path,
+        name: module.name,
+        directory: module.directory,
+        callCount: module.callCount,
+      },
       zIndex: Z.component,
       draggable: false,
     })
-
-    module.targets.forEach((target) => {
-      const methods = [...target.methods].sort()
-      edges.push({
-        id: `call:${module.id}:${target.id}`,
-        source: module.id,
-        target: target.id,
-        label: methods.join(' · '),
-        data: { method: methods[0], unresolved: target.kind === 'unmatched' },
-        zIndex: Z.component,
-      })
-    })
   })
 
+  // --- services ------------------------------------------------------------
+  let cursor = serviceColumnY
+  services.forEach((group, index) => {
+    const size = serviceSizes[index]
+    const groupId = `group:service:${group.technology}`
+
+    nodes.push({
+      id: groupId,
+      type: 'archGroup',
+      position: { x: serviceX, y: cursor },
+      style: { width: serviceWidth, height: size.height },
+      data: {
+        tone: 'backend',
+        technology: group.technology,
+        title: group.technology,
+        caption: group.routes.length === 1 ? '1 route' : `${group.routes.length} routes`,
+      },
+      zIndex: Z.group,
+      draggable: false,
+      selectable: false,
+      focusable: false,
+    })
+
+    group.routes.forEach((route, rowIndex) => {
+      nodes.push({
+        id: route.id,
+        type: 'archRoute',
+        position: cellPosition(rowIndex, ROUTE, routeColumns, serviceX, cursor),
+        style: { width: ROUTE.width, height: ROUTE.height },
+        data: route,
+        zIndex: Z.component,
+        draggable: false,
+      })
+    })
+
+    cursor += size.height + GROUP_GAP
+  })
+
+  if (services.length === 0) {
+    nodes.push({
+      id: 'group:service:none',
+      type: 'archGroup',
+      position: { x: serviceX, y: serviceColumnY },
+      style: { width: serviceWidth, height: serviceColumnHeight },
+      data: { tone: 'backend', title: 'Services', caption: 'none found', empty: true },
+      zIndex: Z.group,
+      draggable: false,
+      selectable: false,
+      focusable: false,
+    })
+  }
+
+  // --- unresolved ----------------------------------------------------------
+  if (externals.length > 0) {
+    nodes.push({
+      id: 'group:external',
+      type: 'archGroup',
+      position: { x: externalX, y: externalY },
+      style: { width: externalSize.width, height: externalSize.height },
+      data: {
+        tone: 'unmatched',
+        title: 'Outside the project',
+        caption: externals.length === 1 ? '1 call with no match' : `${externals.length} calls with no match`,
+      },
+      zIndex: Z.group,
+      draggable: false,
+      selectable: false,
+      focusable: false,
+    })
+
+    externals.forEach((external, index) => {
+      nodes.push({
+        id: external.id,
+        type: 'archExternal',
+        position: cellPosition(index, EXTERNAL, externalColumns, externalX, externalY),
+        style: { width: EXTERNAL.width, height: EXTERNAL.height },
+        data: external,
+        zIndex: Z.component,
+        draggable: false,
+      })
+    })
+
+    const unresolvedTotal = modules.reduce((total, module) => total + module.unresolved, 0)
+    edges.push({
+      id: 'call:client:external',
+      source: 'group:client',
+      target: 'group:external',
+      sourceHandle: 'bottom',
+      targetHandle: 'top',
+      label: unresolvedTotal === 1 ? '1 call' : `${unresolvedTotal} calls`,
+      data: { unresolved: true },
+      zIndex: Z.component,
+    })
+  }
+
+  // --- edges ---------------------------------------------------------------
   edges.push({
     id: 'call:actor:client',
     source: 'actor:client',
     target: 'group:client',
     label: 'uses',
-    data: { method: 'USES', unresolved: false },
+    data: { unresolved: false },
     zIndex: Z.component,
   })
 
-  const width = (externals.length > 0 ? externalX + externalGroupWidth : serviceX + serviceGroupWidth + BOUNDARY_PAD)
-  const height = Math.max(contentHeight, boundaryY + boundaryHeight)
+  const callsPerService = new Map()
+  modules.forEach((module) => {
+    module.reaches.forEach((count, technology) => {
+      callsPerService.set(technology, (callsPerService.get(technology) ?? 0) + count)
+    })
+  })
+
+  services.forEach((group) => {
+    const count = callsPerService.get(group.technology) ?? 0
+    edges.push({
+      id: `call:client:${group.technology}`,
+      source: 'group:client',
+      sourceHandle: 'right',
+      target: `group:service:${group.technology}`,
+      label: count === 1 ? '1 call' : `${count} calls`,
+      data: { unresolved: false },
+      zIndex: Z.component,
+    })
+  })
+
+  const width = serviceX + serviceWidth + BOUNDARY_PAD
+  const height = Math.max(boundaryY + boundaryHeight, externals.length > 0 ? externalY + externalSize.height : 0)
 
   return {
     nodes,
@@ -335,8 +390,8 @@ export function buildArchitecture(analysis) {
     summary: {
       modules: modules.length,
       calls: analysis.nodes.filter((node) => node.kind === 'frontend').length,
-      routes: routeGroups.reduce((total, group) => total + group.routes.length, 0),
-      services: routeGroups.length,
+      routes: services.reduce((total, group) => total + group.routes.length, 0),
+      services: services.length,
       externals: externals.length,
     },
   }
