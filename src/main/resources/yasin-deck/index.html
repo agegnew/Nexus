@@ -33,6 +33,62 @@
       because the project only has to be understood once.
     </p>
 
+    <!--
+      The same control the Reel tab carries, down to the element ids, because
+      /shared/scope.js reads them. A meeting about the last three weeks needs the same
+      deck the film needs, so neither tab gets to invent its own idea of a period.
+    -->
+    <fieldset class="scope" id="scope">
+      <legend class="scope__legend">What the deck is about</legend>
+
+      <div class="scope__modes" role="radiogroup" aria-label="Deck subject">
+        <label class="scope__mode">
+          <input type="radio" name="deck-scope" value="launch" checked>
+          <span><strong>The product</strong><small>What it is and what it does, from the whole codebase.</small></span>
+        </label>
+        <label class="scope__mode">
+          <input type="radio" name="deck-scope" value="recap">
+          <span><strong>Progress update</strong><small>What was built in a period, from the commits in it.</small></span>
+        </label>
+      </div>
+
+      <div class="scope__range" id="scope-range" hidden>
+        <label class="scope__field">
+          <span>Period</span>
+          <select id="scope-period">
+            <option value="this-week">This week</option>
+            <option value="last-week" selected>Last week</option>
+            <option value="this-month">This month</option>
+            <option value="last-month">Last month</option>
+            <option value="last-7">Last 7 days</option>
+            <option value="last-30">Last 30 days</option>
+            <option value="last-90">Last 90 days</option>
+            <option value="custom">Custom range</option>
+          </select>
+        </label>
+
+        <label class="scope__field" id="scope-from-field" hidden>
+          <span>From</span>
+          <input type="date" id="scope-from">
+        </label>
+
+        <label class="scope__field" id="scope-to-field" hidden>
+          <span>To</span>
+          <input type="date" id="scope-to">
+        </label>
+
+        <span class="scope__dates" id="scope-dates"></span>
+
+        <label class="scope__field">
+          <span>Area</span>
+          <select id="scope-area"><option value="all">All</option></select>
+        </label>
+
+        <label class="scope__toggle"><input type="checkbox" id="scope-mine" checked> Only my commits</label>
+        <label class="scope__toggle"><input type="checkbox" id="scope-uncommitted" checked> Include uncommitted</label>
+      </div>
+    </fieldset>
+
     <div class="picker__cuts">
       <button class="cut" id="cut-technical" type="button" data-audience="technical">
         <span class="cut__kind">For an engineering review</span>
@@ -74,6 +130,8 @@
 
 </main>
 
+<!-- Shared with the Reel tab, so "last week" means one thing in this plugin. -->
+<script src="/shared/scope.js"></script>
 <script src="runtime/preview.js"></script>
 <script src="runtime/deck.js"></script>
 </body>

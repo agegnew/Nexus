@@ -160,7 +160,7 @@ class ReelToolWindowFactory : ToolWindowFactory, DumbAware {
                 project,
                 browser,
                 message.stringOrNull("audience") ?: Audience.TECHNICAL,
-                scopeOf(message)
+                ReelScope.from(message)
             )
             "scopes" -> sendScopes(project, browser)
             "openFile" -> openInEditor(project, message.stringOrNull("file"), message.intOrNull("line") ?: 1)
@@ -191,26 +191,6 @@ class ReelToolWindowFactory : ToolWindowFactory, DumbAware {
             return
         }
         ApplicationManager.getApplication().invokeLater { RevealFileAction.openFile(file) }
-    }
-
-    /**
-     * Reads the recap controls off a generate message. Anything missing or unreadable falls back
-     * to a launch reel, so an older player that knows nothing about ranges still works.
-     */
-    private fun scopeOf(message: JsonObject): ReelScope {
-        val kind = message.stringOrNull("scope") ?: ReelScope.LAUNCH
-        if (kind != ReelScope.RECAP) return ReelScope.launch()
-        val since = message.stringOrNull("since").orEmpty()
-        val until = message.stringOrNull("until").orEmpty()
-        if (since.isBlank() || until.isBlank()) return ReelScope.launch()
-        return ReelScope(
-            kind = ReelScope.RECAP,
-            since = since,
-            until = until,
-            area = message.stringOrNull("area") ?: "all",
-            mine = message.boolOrNull("mine") ?: true,
-            includeUncommitted = message.boolOrNull("uncommitted") ?: true
-        )
     }
 
     /** The player asks for the scope list once it loads, so the area picker matches the project. */
@@ -476,11 +456,6 @@ class ReelToolWindowFactory : ToolWindowFactory, DumbAware {
     private fun JsonObject.stringOrNull(name: String): String? {
         val element = get(name) ?: return null
         return if (element.isJsonPrimitive) element.asString else null
-    }
-
-    private fun JsonObject.boolOrNull(name: String): Boolean? {
-        val element = get(name) ?: return null
-        return runCatching { element.asBoolean }.getOrNull()
     }
 
     private fun JsonObject.intOrNull(name: String): Int? {

@@ -88,6 +88,16 @@ object Caps {
     const val MAX_STATS = 4
 
     const val CARD_TITLE = 42
+
+    /**
+     * A card with no body under it, which owns the whole box instead of the top of it.
+     *
+     * The progress deck's "what was done" grid is built from commit subjects, and a
+     * commit subject is a sentence. At [CARD_TITLE] most of them ended on an ellipsis,
+     * which is the one thing worse than not showing them: it looks like the tool ran out
+     * of room rather than like the developer said something.
+     */
+    const val CARD_TITLE_ALONE = 96
     const val CARD_BODY = 150
     const val MAX_CARDS = 6
 

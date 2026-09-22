@@ -210,6 +210,7 @@ src/main/resources/yasin-deck/
   icons/*.png                            sixteen icons, rasterised from the film's set
 src/test/kotlin/com/example/yasinreel/
   DeckTest.kt               package structure, fit, vocabulary, and a slide dump to look at
+  DeckRecapTest.kt          the date-ranged deck: what it says, what it counts, and the control
 ```
 
 Shared files touched **once each**: `NexusToolWindowFactory.kt` (add the tab),
@@ -218,7 +219,38 @@ and 2 became a public `buildUnderstanding` so the deck can call the same code ra
 read the project twice. No teammate file is edited, as before.
 
 Decks are written to `~/Desktop/Nexus Reel/`, the folder the video exports already use,
-named `<project>-technical-<date>.pptx`. One place for everything Nexus produces.
+named `<project>-technical-deck-<date>.pptx`. One place for everything Nexus produces.
+
+---
+
+## 8a. A deck about a period, not about the product
+
+Added after the first version shipped, because the request the deck exists to serve is
+usually not "explain the product" but "I have a meeting tomorrow about the last three
+weeks". Both tabs now carry the same two-way control: **The product** (the whole codebase)
+or **Progress update** (a date range), with the periods the Activity tab offers, a custom
+range, an area, *only my commits* and *include uncommitted*.
+
+Nothing about the history is re-implemented. `ChangedFiles` already turns a `ReelScope`
+into the set of files a period touched by calling the Activity tab's own `GitActivitySource`,
+`DateRange`, `ModuleDetector` and `ScopeFilter`, so "last week" means one thing across the
+three features. `ReelPipeline.buildUnderstanding` already took a scope; the deck simply
+stopped passing `launch()` and started passing the user's.
+
+| Piece | Where | Why there |
+|---|---|---|
+| The panel's meaning | `resources/yasin-shared/scope.js`, served at `/shared/scope.js` | one definition of Monday. Two copies would have drifted the first time a period was edited in one tab only |
+| The panel's markup | each page's own `index.html`, same element ids | each tab words its own two choices, and a test checks all three agree on the ids |
+| Reading it in Kotlin | `ReelScope.from(JsonObject)` | both bridges send the same object, so both read it the same way |
+| The slides it produces | `DeckComposer`, on `Evidence.recap` | a progress update opens on the period instead of the problem, leads with the commit subjects, and counts the window rather than the project |
+
+A range with no work in it returns null from `buildUnderstanding` and is reported as what
+it is, with the two controls most likely to be the cause named in the message.
+
+Two defects in the film's own recap came out of building this and are fixed here: the
+stakeholder cut's period scene was deleted by the plain-language guard for saying
+"Commits", so that cut went out with no numbers on it at all, and the technical cut asked
+its four-cell grid for five stats whenever a period both removed lines and left work open.
 
 ---
 

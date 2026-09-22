@@ -29,126 +29,31 @@
 
 
   // ---- reel scope ----------------------------------------------------------
-  // The same periods the Activity tab offers, so "last week" means one thing in
-  // this plugin. Kept inline because this runtime is plain scripts, not modules.
+  /*
+   * The date range lives in /shared/scope.js, which the Deck tab loads as well. It used
+   * to be inlined here; the moment a second tab needed the same periods, one copy became
+   * the only way "last week" can keep meaning the same thing in both of them.
+   *
+   * Guarded rather than assumed: this page is also opened straight off disk during
+   * development, where an absolute path resolves to nothing, and a reel that refuses to
+   * build because a date picker is missing would be a poor trade.
+   */
+  var scope = window.NexusScope || {
+    payload: function () { return { scope: 'launch' }; },
+    key: function (prefix) { return prefix + ':launch'; },
+    fillAreas: function () {},
+    watch: function () {},
+    refresh: function () {}
+  };
 
-  function isoDay(date) {
-    return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
-  }
+  function scopePayload() { return scope.payload(); }
 
-  function startOfWeek(date) {
-    var start = new Date(date);
-    start.setDate(start.getDate() - ((start.getDay() + 6) % 7));
-    return start;
-  }
+  function scopeKey(audience) { return scope.key(audience); }
 
-  function shiftDays(date, days) {
-    var next = new Date(date);
-    next.setDate(next.getDate() + days);
-    return next;
-  }
-
-  function periodDates(id) {
-    var today = new Date();
-    switch (id) {
-      case 'this-week': return [startOfWeek(today), today];
-      case 'last-week': return [shiftDays(startOfWeek(today), -7), shiftDays(startOfWeek(today), -1)];
-      case 'this-month': return [new Date(today.getFullYear(), today.getMonth(), 1), today];
-      case 'last-month': return [
-        new Date(today.getFullYear(), today.getMonth() - 1, 1),
-        new Date(today.getFullYear(), today.getMonth(), 0)
-      ];
-      case 'last-30': return [shiftDays(today, -29), today];
-      default: return null;
-    }
-  }
-
-  function el(id) { return document.getElementById(id); }
-
-  function scopeMode() {
-    var checked = document.querySelector('input[name="reel-scope"]:checked');
-    return checked ? checked.value : 'launch';
-  }
-
-  function currentRange() {
-    var period = el('scope-period');
-    var chosen = period ? period.value : 'last-week';
-    if (chosen === 'custom') {
-      var from = el('scope-from');
-      var to = el('scope-to');
-      return { since: from && from.value, until: to && to.value };
-    }
-    var pair = periodDates(chosen);
-    return pair ? { since: isoDay(pair[0]), until: isoDay(pair[1]) } : { since: '', until: '' };
-  }
-
-  function refreshScopeUi() {
-    var recap = scopeMode() === 'recap';
-    var range = el('scope-range');
-    if (range) range.hidden = !recap;
-
-    var custom = el('scope-period') && el('scope-period').value === 'custom';
-    var fromField = el('scope-from-field');
-    var toField = el('scope-to-field');
-    if (fromField) fromField.hidden = !custom;
-    if (toField) toField.hidden = !custom;
-
-    var dates = el('scope-dates');
-    if (dates) {
-      var current = currentRange();
-      dates.textContent = custom || !current.since ? '' : current.since + ' → ' + current.until;
-    }
-  }
-
-  // The scope is part of a film's identity: a recap of last week is not the film a
-  // recap of last month is, so replaying by audience alone would show the wrong one.
-  function scopePayload() {
-    if (scopeMode() !== 'recap') return { scope: 'launch' };
-    var range = currentRange();
-    var area = el('scope-area');
-    var mine = el('scope-mine');
-    var uncommitted = el('scope-uncommitted');
-    return {
-      scope: 'recap',
-      since: range.since || '',
-      until: range.until || '',
-      area: area ? area.value : 'all',
-      mine: mine ? mine.checked : true,
-      uncommitted: uncommitted ? uncommitted.checked : true
-    };
-  }
-
-  function scopeKey(audience) {
-    var payload = scopePayload();
-    return payload.scope === 'launch'
-      ? audience + ':launch'
-      : audience + ':recap:' + payload.since + ':' + payload.until + ':' + payload.area +
-        ':' + payload.mine + ':' + payload.uncommitted;
-  }
-
-  function fillAreas(areas) {
-    var select = el('scope-area');
-    if (!select || !areas || !areas.length) return;
-    var previous = select.value;
-    select.innerHTML = '';
-    areas.forEach(function (area) {
-      var option = document.createElement('option');
-      option.value = area.id;
-      option.textContent = area.label;
-      select.appendChild(option);
-    });
-    if (previous) select.value = previous;
-    if (!select.value) select.value = 'all';
-  }
-
-  document.addEventListener('change', function (event) {
-    if (!event.target.closest || !event.target.closest('#scope')) return;
-    refreshScopeUi();
-  });
+  scope.watch();
 
   window.addEventListener('yasin-reel:scopes', function (event) {
-    var detail = event.detail || {};
-    fillAreas(detail.areas);
+    scope.fillAreas((event.detail || {}).areas);
   });
 
   Array.prototype.forEach.call(document.querySelectorAll('.cut'), function (button) {
@@ -331,7 +236,7 @@
     // The fixture may already be on screen, and the handshake is no reason to talk
     // over whatever the player is saying about it.
     if (!window.NexusReel.composition()) say('Ready. Pick a cut to build.');
-    refreshScopeUi();
+    scope.refresh();
     toIde({ type: 'ready' });
     // The area list comes from the project, so it is asked for rather than hard-coded.
     toIde({ type: 'scopes' });

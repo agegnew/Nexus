@@ -104,7 +104,7 @@ object FallbackDirector {
 
         return listOfNotNull(
             title,
-            recapScene(evidence),
+            recapScene(evidence, stakeholder = true),
             recapWorkScene(evidence),
             promise,
             journey,
@@ -329,7 +329,7 @@ object FallbackDirector {
      */
     private fun technicalCut(evidence: Evidence, prose: Prose): List<Scene> = listOfNotNull(
         technicalTitle(evidence, prose),
-        recapScene(evidence),
+        recapScene(evidence, stakeholder = false),
         recapWorkScene(evidence),
         measurementScene(evidence),
         languageScene(evidence),
@@ -350,14 +350,30 @@ object FallbackDirector {
      * time a recap was generated. A recap that silently becomes a product tour is worse than a
      * plain one, so the offline path has to tell the same story.
      */
-    private fun recapScene(evidence: Evidence): Scene? {
+    private fun recapScene(evidence: Evidence, stakeholder: Boolean): Scene? {
         val recap = evidence.recap ?: return null
+
+        /*
+         * The labels are audience specific, and that is not a nicety.
+         *
+         * "Commits" is on the banned list, so on the stakeholder cut enforcePlainLanguage
+         * threw this whole scene away and the recap went out with no numbers on it at all:
+         * a film titled "what we built last week" that never said how much. The stakeholder
+         * labels below are the same counts in the room's own words, so the scene survives
+         * instead of being deleted.
+         */
         val stats = JsonArray()
-        stats.add(stat("Commits", count(recap.commits)))
-        stats.add(stat("Files", count(recap.filesTouched)))
-        stats.add(stat("Added", "+${count(recap.linesAdded)}"))
-        if (recap.linesDeleted > 0) stats.add(stat("Removed", "-${count(recap.linesDeleted)}"))
-        if (recap.uncommittedFiles > 0) stats.add(stat("Not committed", count(recap.uncommittedFiles)))
+        stats.add(stat(if (stakeholder) "Changes" else "Commits", count(recap.commits)))
+        stats.add(stat(if (stakeholder) "Parts touched" else "Files", count(recap.filesTouched)))
+        stats.add(stat(if (stakeholder) "New work" else "Added", "+${count(recap.linesAdded)}"))
+        when {
+            recap.linesDeleted > 0 ->
+                stats.add(stat(if (stakeholder) "Taken out" else "Removed", "-${count(recap.linesDeleted)}"))
+            recap.uncommittedFiles > 0 ->
+                stats.add(stat(if (stakeholder) "In progress" else "Not landed", count(recap.uncommittedFiles)))
+        }
+        // The grid lays out four cells, so a fifth wraps into a broken row. It used to add
+        // one whenever a period both removed lines and left work open, which is most of them.
 
         val slots = JsonObject().apply {
             addProperty("heading", "${recap.since} to ${recap.until}")
@@ -365,18 +381,24 @@ object FallbackDirector {
         }
         // One sentence, with the work-in-progress clause inside it. The validator trims narration
         // to the scene's time budget and cuts at the last full stop, so anything said in a second
-        // sentence is the first thing to disappear — and "some of this is not finished" is the
+        // sentence is the first thing to disappear, and "some of this is not finished" is the
         // last claim that should be allowed to quietly vanish.
-        val pending = if (recap.uncommittedFiles > 0) {
-            ", and ${recap.uncommittedFiles} of them are still uncommitted work in progress"
+        // Kept short for the stakeholder, because a scene caps at eight seconds and the trim
+        // cuts to a whole word: the longer phrasing came out as "still being", mid clause.
+        val pending = when {
+            recap.uncommittedFiles == 0 -> ""
+            stakeholder -> ", and ${recap.uncommittedFiles} are still in progress"
+            else -> ", and ${recap.uncommittedFiles} of them are still uncommitted work in progress"
+        }
+        val body = if (stakeholder) {
+            "${plural(recap.commits, "change")} across ${plural(recap.filesTouched, "part")}"
         } else {
-            ""
+            "${plural(recap.commits, "commit")} across ${plural(recap.filesTouched, "file")}"
         }
         return scene(
             SceneTemplate.STAT_GRID,
             slots,
-            "Between ${recap.since} and ${recap.until}: ${plural(recap.commits, "commit")} " +
-                "across ${plural(recap.filesTouched, "file")}$pending."
+            "Between ${recap.since} and ${recap.until}: $body$pending."
         )
     }
 

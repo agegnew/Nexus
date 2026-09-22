@@ -82,6 +82,80 @@ body {
 .cut__state[data-state="ready"] { color: #12B76A; }
 .cut__state[data-state="failed"] { color: var(--danger); }
 
+/* ------------------------------------------------- the date range (shared markup) */
+
+/*
+ * Matches the Reel tab's panel because it is the same control, and the tokens above are
+ * the same light palette, so the two tabs stay one product. The fallbacks exist for the
+ * standalone case where this file is read without the :root block having applied.
+ */
+.scope {
+  margin: 0;
+  padding: 14px 16px;
+  border: 1px solid var(--border-subtle, #DCE3ED);
+  border-radius: 10px;
+  background: var(--surface-raised, #FFFFFF);
+}
+
+.scope__legend {
+  padding: 0 6px;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted, #79859A);
+}
+
+.scope__modes { display: flex; flex-wrap: wrap; gap: 14px; }
+
+.scope__mode { display: flex; gap: 8px; align-items: flex-start; cursor: pointer; }
+.scope__mode span { display: grid; gap: 2px; }
+.scope__mode strong { font-size: 13px; }
+.scope__mode small { color: var(--text-muted, #79859A); font-size: 11px; }
+
+.scope__range {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-subtle, #DCE3ED);
+}
+
+.scope__field { display: grid; gap: 3px; }
+.scope__field > span {
+  font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--text-muted, #79859A);
+}
+
+.scope__field select,
+.scope__field input[type="date"] {
+  padding: 5px 7px;
+  font: inherit;
+  font-size: 12px;
+  color: inherit;
+  background: var(--surface-base, #F3F5F9);
+  border: 1px solid var(--border-subtle, #DCE3ED);
+  border-radius: 6px;
+}
+
+.scope__dates {
+  align-self: center;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted, #79859A);
+}
+
+.scope__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: center;
+  font-size: 12px;
+  color: var(--text-muted, #79859A);
+  cursor: pointer;
+}
+
 /* The icon on a picker button, the same artwork the slides use. */
 .ic {
   grid-row: 1 / span 4; align-self: center;

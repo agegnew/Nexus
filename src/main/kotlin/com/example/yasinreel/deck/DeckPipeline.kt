@@ -43,6 +43,7 @@ class DeckPipeline(private val project: Project) {
 
     data class Built(
         val deck: Deck,
+        val scope: ReelScope,
         val file: File,
         val slides: Int,
         val byAi: Boolean,
@@ -53,6 +54,7 @@ class DeckPipeline(private val project: Project) {
 
     fun generate(
         audience: String,
+        scope: ReelScope = ReelScope.launch(),
         onProgress: (String) -> Unit,
         onDone: (Built) -> Unit,
         onError: (String) -> Unit
@@ -68,8 +70,13 @@ class DeckPipeline(private val project: Project) {
             return
         }
 
-        val task = object : Task.Backgroundable(project, "Building the $audience deck", true) {
-            override fun run(indicator: ProgressIndicator) = build(audience, indicator, progress, done, failed)
+        val title = if (scope.isRecap) {
+            "Building the $audience update for ${scope.describe()}"
+        } else {
+            "Building the $audience deck"
+        }
+        val task = object : Task.Backgroundable(project, title, true) {
+            override fun run(indicator: ProgressIndicator) = build(audience, scope, indicator, progress, done, failed)
             override fun onFinished() = running.set(false)
         }
 
@@ -87,6 +94,7 @@ class DeckPipeline(private val project: Project) {
 
     private fun build(
         audience: String,
+        scope: ReelScope,
         indicator: ProgressIndicator,
         onProgress: (String) -> Unit,
         onDone: (Built) -> Unit,
@@ -96,18 +104,17 @@ class DeckPipeline(private val project: Project) {
         indicator.isIndeterminate = false
         try {
             /*
-             * The whole project, not a date range.
+             * The same two stages the film runs, reading the same cache, under the same
+             * scope. A deck of a fortnight's commits and a film of the same fortnight are
+             * then provably the same set of facts told twice, and asking for one after the
+             * other costs nothing the second time.
              *
-             * `buildUnderstanding` gained a scope on main, where a reel can also be a
-             * recap of the work done in a period. A deck of a fortnight's commits is a
-             * real idea and not this one, so it asks for the launch scope, which is the
-             * only scope that can never come back empty. The null branch is therefore
-             * unreachable and is still handled, because a signature that can return null
-             * will eventually return null.
+             * Null means the user picked a range in which nothing happened. That is a real
+             * answer and not a failure, so it is reported as what it is.
              */
             val understood = ReelPipeline.getInstance(project)
-                .buildUnderstanding(ReelScope.launch(), indicator, onProgress)
-                ?: throw IllegalStateException("There was nothing in this project to build a deck from.")
+                .buildUnderstanding(scope, indicator, onProgress)
+                ?: throw EmptyRange(scope)
 
             step(indicator, onProgress, 0.72, "Laying out the $audience deck")
             val model = understood.model
@@ -125,7 +132,7 @@ class DeckPipeline(private val project: Project) {
             val art = DeckGeometry.render(checked.deck)
 
             step(indicator, onProgress, 0.96, "Writing the presentation")
-            val target = File(exportDir(), "${baseName(audience)}.pptx")
+            val target = File(exportDir(), "${baseName(audience, scope)}.pptx")
             PptxWriter.write(
                 slides = art,
                 icons = DeckIcons.load(),
@@ -146,6 +153,7 @@ class DeckPipeline(private val project: Project) {
 
             val built = Built(
                 deck = checked.deck,
+                scope = scope,
                 file = target,
                 slides = art.size,
                 byAi = model != null,
@@ -159,6 +167,9 @@ class DeckPipeline(private val project: Project) {
             logger.info("Nexus Deck generation of the $audience deck was cancelled")
             onError("Cancelled.")
             throw e
+        } catch (e: EmptyRange) {
+            logger.info("Nexus Deck found no work ${e.scope.describe()}")
+            onError(e.message.orEmpty())
         } catch (e: Exception) {
             logger.warn("Nexus Deck could not generate the $audience deck", e)
             onError(e.message ?: "The deck could not be built.")
@@ -186,9 +197,10 @@ class DeckPipeline(private val project: Project) {
             ?.takeIf { it.isGroupRegistered(GROUP_ID) }
             ?.getNotificationGroup(GROUP_ID)
             ?: return
+        val period = if (built.scope.isRecap) " for ${built.scope.since} to ${built.scope.until}" else ""
         val notification = group.createNotification(
             "${label(audience)} ready",
-            "${built.slides} slides, in ${built.file.parentFile.name}.",
+            "${built.slides} slides$period, in ${built.file.parentFile.name}.",
             NotificationType.INFORMATION
         )
         if (RevealFileAction.isSupported()) {
@@ -222,11 +234,26 @@ class DeckPipeline(private val project: Project) {
         }.onFailure { logger.debug("Nexus Deck could not write $name", it) }
     }
 
-    private fun baseName(audience: String): String {
+    /**
+     * The file name says what the deck covers, not just when it was made.
+     *
+     * Two updates built a week apart from two different ranges would otherwise differ only
+     * by the day they were generated, which is the one fact nobody in the meeting cares
+     * about. A recap is named after its range instead.
+     */
+    private fun baseName(audience: String, scope: ReelScope): String {
         val project = project.name.replace(Regex("[^A-Za-z0-9._-]+"), "-").trim('-').ifEmpty { "project" }
-        val stamp = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.ENGLISH))
-        return "$project-${fileSafe(audience)}-deck-$stamp"
+        val tail = scope.fileTag().ifEmpty {
+            "deck-" + LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.ENGLISH))
+        }
+        return "$project-${fileSafe(audience)}-$tail"
     }
+
+    /** Not an error in the pipeline: an honest answer about the range the user picked. */
+    private class EmptyRange(val scope: ReelScope) : RuntimeException(
+        "Nothing changed ${scope.describe()}, so there is no update to build. " +
+            "Try a wider period, or turn off \"Only my commits\"."
+    )
 
     private fun fileSafe(audience: String): String =
         audience.lowercase().replace(Regex("[^a-z0-9]+"), "-").trim('-').ifEmpty { "deck" }

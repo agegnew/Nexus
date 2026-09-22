@@ -13,6 +13,20 @@
   var thumbs = [];
   var busy = false;
 
+  /*
+   * The date range, from /shared/scope.js, which the Reel tab loads too. Guarded because
+   * this page is also opened straight off disk during development, where an absolute
+   * path resolves to nothing, and a deck that refuses to build because a date picker is
+   * missing would be a poor trade.
+   */
+  var scope = window.NexusScope || {
+    payload: function () { return { scope: 'launch' }; },
+    describe: function () { return 'the whole project'; },
+    isRecap: function () { return false; },
+    fillAreas: function () {},
+    watch: function () {}
+  };
+
   function byId(id) { return document.getElementById(id); }
 
   function cache() {
@@ -76,12 +90,47 @@
     lock(true);
     var button = audience === 'stakeholder' ? dom.buttons[1] : dom.buttons[0];
     state(button, 'working', 'Working...');
-    status('Starting.');
-    if (!send({ type: 'build', audience: audience })) {
+
+    // The range is part of what is being asked for, so it travels with the request
+    // rather than being read out of the panel again on the Kotlin side.
+    var message = scope.payload();
+    message.type = 'build';
+    message.audience = audience;
+
+    status(scope.isRecap()
+      ? 'Building the ' + audience + ' update for ' + scope.describe() + '.'
+      : 'Starting.');
+    if (!send(message)) {
       lock(false);
       state(button, 'failed', 'No IDE');
       status('This page is not connected to the IDE, so nothing can be built from here.', 'error');
     }
+  }
+
+  /*
+   * The two buttons promise particular slides, and a progress update does not contain
+   * the same ones. Leaving the copy fixed would mean the picker described a deck the
+   * user had already chosen not to build.
+   */
+  var BLURBS = {
+    launch: {
+      technical: 'Architecture, one traced path, the stack and what the analysis could not find.',
+      stakeholder: 'The problem, what a person can now do, and what comes next. No jargon.'
+    },
+    recap: {
+      technical: 'What landed in the period, where it landed, and what is still open.',
+      stakeholder: 'What the period produced, in plain language. No jargon.'
+    }
+  };
+
+  function describeButtons() {
+    var set = BLURBS[scope.isRecap() ? 'recap' : 'launch'];
+    dom.buttons.forEach(function (button) {
+      if (!button) return;
+      var blurb = button.querySelector('.cut__blurb');
+      var audience = button.getAttribute('data-audience');
+      if (blurb && set[audience]) blurb.textContent = set[audience];
+    });
   }
 
   function wire() {
@@ -99,6 +148,7 @@
     // The thumbnails are a fixed coordinate space scaled to their column, so a resized
     // tool window has to rescale them rather than reflow them.
     window.addEventListener('resize', function () { window.DeckPreview.fit(thumbs); });
+    scope.watch(describeButtons);
   }
 
   /* ---------------------------------------------------------- from the IDE */
@@ -108,6 +158,13 @@
     ready: function (info) {
       if (info && info.projectName) dom.project.textContent = info.projectName;
       status(info && info.hint ? info.hint : 'Ready.');
+      // The areas are the project's own modules, so they are asked for, not guessed.
+      send({ type: 'scopes' });
+    },
+
+    /** The area dropdown, filled from the modules the IDE found on disk. */
+    scopes: function (payload) {
+      scope.fillAreas(payload && payload.areas);
     },
 
     progress: function (message) {
@@ -122,9 +179,13 @@
       state(button, 'ready', payload.slides + ' slides');
 
       dom.title.textContent = payload.title || 'Deck';
-      dom.sub.textContent = payload.fileName + '  ·  ' + payload.slides + ' slides  ·  ' +
-        (payload.byAi ? 'written from the understood product' : 'built from harvested facts, no key found') +
-        (payload.cacheHit ? '  ·  reused this project’s analysis' : '');
+      dom.sub.textContent = [
+        payload.period,
+        payload.fileName,
+        payload.slides + ' slides',
+        payload.byAi ? 'written from the understood product' : 'built from harvested facts, no key found',
+        payload.cacheHit ? 'reused this project’s analysis' : null
+      ].filter(Boolean).join('  ·  ');
 
       // Shown before drawn, not after. A thumbnail is a fixed 1280px stage scaled to
       // whatever width its column ended up with, and a hidden panel has no width, so

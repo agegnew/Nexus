@@ -99,6 +99,8 @@ class ReelServer : Disposable {
         val http = HttpServer.create(InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0)
         http.createContext("/") { exchange -> serve(exchange, RESOURCE_ROOT) }
         http.createContext("/" + DECK_PREFIX) { exchange -> serve(exchange, DECK_ROOT, DECK_PREFIX + "/") }
+        // One copy of the code both tabs share, reachable from both by absolute path.
+        http.createContext("/" + SHARED_PREFIX) { exchange -> serve(exchange, SHARED_ROOT, SHARED_PREFIX + "/") }
         http.executor = null
         http.start()
         logger.info("Nexus Reel server listening on 127.0.0.1:${http.address.port}")
@@ -188,6 +190,14 @@ class ReelServer : Disposable {
         /** The deck tab, served under [DECK_PREFIX] on the same port as the reel. */
         private const val DECK_ROOT = "yasin-deck"
         private const val DECK_PREFIX = "deck"
+
+        /**
+         * Code both tabs load, and the reason the date range means one thing in this plugin.
+         * It has its own root because it belongs to neither tab, and its own context because
+         * the two tabs are served from two different roots on this one port.
+         */
+        private const val SHARED_ROOT = "yasin-shared"
+        private const val SHARED_PREFIX = "shared"
 
         /** The port MyToolWindowFactory already asks for. */
         private const val VITE_PORT = 5173

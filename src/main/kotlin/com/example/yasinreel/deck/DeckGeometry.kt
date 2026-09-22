@@ -222,21 +222,47 @@ object DeckGeometry {
             out += Box(cx, cy, cw, ch, DeckTheme.WASH, roundPct = 4)
             out += Box(cx, cy, cw, 5, colour)
 
-            val name = DeckTheme.clip(card.str("title").orEmpty(), Caps.CARD_TITLE)
             val body = DeckTheme.clip(card.str("body").orEmpty(), Caps.CARD_BODY)
+            /*
+             * A card with nothing under its title is all title, so it gets the room and
+             * the length that implies. The progress deck's "what was done" grid is made
+             * of commit subjects, which are whole sentences: cut to the length a card
+             * with a body below it can take, half of them ended on an ellipsis.
+             */
+            val alone = body.isEmpty()
+            val name = DeckTheme.clip(
+                card.str("title").orEmpty(),
+                if (alone) Caps.CARD_TITLE_ALONE else Caps.CARD_TITLE
+            )
             val pad = 24
             val iconSize = if (ch >= 210) 54 else 42
             icon(out, cx + pad, cy + pad + 8, iconSize, card.str("icon") ?: DeckIcons.pick(name, body, i, taken), wash(colour))
 
             val innerW = cw - pad * 2
             val titleY = cy + pad + iconSize + 20
-            val titleSize = DeckTheme.fit(name, innerW, 74, listOf(26, 23, 20, 18), bold = true, linePct = 116)
+            val titleBox = if (alone) max(cy + ch - pad - titleY, 1) else 74
+            val titleSize = DeckTheme.fit(
+                name, innerW, titleBox,
+                if (alone) listOf(24, 21, 19, 17, 15) else listOf(26, 23, 20, 18),
+                bold = true, linePct = 116
+            )
             // Measured, not assumed. A fixed box here took the whole card and the body
             // below it was dropped for want of twenty pixels on every two row grid.
-            val titleH = DeckTheme.linesNeeded(name, innerW, titleSize, true) * titleSize * 116 / 100
-            out += Label(cx + pad, titleY, innerW, titleH, listOf(name), titleSize, DeckTheme.INK, bold = true, linePct = 116)
+            // Clamped, because the smallest size on offer may still not be enough, and a
+            // box that outgrows its card is a box that draws over the one beneath it.
+            val titleH = min(DeckTheme.linesNeeded(name, innerW, titleSize, true) * titleSize * 116 / 100, titleBox)
+            out += Label(
+                cx + pad, titleY, innerW,
+                // A title with a body under it sits directly above it. A title on its own
+                // owns the rest of the card, and sitting it at the top leaves a hole under
+                // every short one, so it is centred in the space it actually has.
+                if (alone) titleBox else titleH,
+                listOf(name), titleSize, DeckTheme.INK,
+                bold = true, linePct = 116,
+                anchor = if (alone) Anchor.MIDDLE else Anchor.TOP
+            )
 
-            if (body.isNotEmpty()) {
+            if (!alone) {
                 val bodyY = titleY + titleH + 14
                 val bodyH = cy + ch - pad - bodyY
                 if (bodyH >= 26) {

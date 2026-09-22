@@ -56,7 +56,9 @@
             <option value="last-week" selected>Last week</option>
             <option value="this-month">This month</option>
             <option value="last-month">Last month</option>
+            <option value="last-7">Last 7 days</option>
             <option value="last-30">Last 30 days</option>
+            <option value="last-90">Last 90 days</option>
             <option value="custom">Custom range</option>
           </select>
         </label>
@@ -157,6 +159,8 @@
 <script src="runtime/audio.js"></script>
 <script src="runtime/player.js"></script>
 <script src="runtime/fixture.js"></script>
+<!-- Shared with the Deck tab, so "last week" means one thing in this plugin. -->
+<script src="/shared/scope.js"></script>
 <!-- Last, because it may play a storyboard the IDE set before load. -->
 <script src="runtime/bridge.js"></script>
 </body>

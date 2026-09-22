@@ -1,7 +1,10 @@
 package com.example.yasinreel.deck
 
+import com.example.yasinreel.harvest.ChangedFiles
 import com.example.yasinreel.model.Audience
+import com.example.yasinreel.model.ReelScope
 import com.example.yasinreel.render.ReelServer
+import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import com.intellij.ide.BrowserUtil
@@ -134,7 +137,15 @@ class DeckToolWindowFactory : ToolWindowFactory, DumbAware {
             .getOrNull() ?: return
 
         when (val type = message.get("type")?.asString) {
-            "build" -> build(project, browser, message.get("audience")?.asString ?: Audience.TECHNICAL)
+            "build" -> build(
+                project,
+                browser,
+                message.get("audience")?.asString ?: Audience.TECHNICAL,
+                // Read by ReelScope itself, so the Deck tab and the Reel tab cannot end up
+                // with two readings of the same panel.
+                ReelScope.from(message)
+            )
+            "scopes" -> sendScopes(project, browser)
             "open" -> withDeck(project) { file ->
                 runCatching { BrowserUtil.browse(file) }
                     .onFailure { logger.warn("Nexus Deck could not open $file", it) }
@@ -154,10 +165,17 @@ class DeckToolWindowFactory : ToolWindowFactory, DumbAware {
         ApplicationManager.getApplication().invokeLater({ action(file) }, ModalityState.any())
     }
 
-    private fun build(project: Project, browser: JBCefBrowser, audience: String) {
-        logger.info("Nexus Deck building the $audience deck on request from the tab")
+    /** The area list is the project's own modules, so the tab asks rather than guessing. */
+    private fun sendScopes(project: Project, browser: JBCefBrowser) {
+        val areas = runCatching { ChangedFiles.areas(project) }.getOrDefault(emptyList())
+        call(browser, "scopes", JsonParser.parseString(Gson().toJson(mapOf("areas" to areas))).asJsonObject)
+    }
+
+    private fun build(project: Project, browser: JBCefBrowser, audience: String, scope: ReelScope) {
+        logger.info("Nexus Deck building the $audience deck (${scope.kind}) on request from the tab")
         DeckPipeline.getInstance(project).generate(
             audience = audience,
+            scope = scope,
             onProgress = { message -> call(browser, "progress", message) },
             onDone = { built ->
                 delivered[project.locationHash] = built.file
@@ -176,7 +194,11 @@ class DeckToolWindowFactory : ToolWindowFactory, DumbAware {
             byAi = built.byAi,
             cacheHit = built.cacheHit,
             issues = built.issues
-        ).also { it.addProperty("audience", audience) }
+        ).also {
+            it.addProperty("audience", audience)
+            // Shown in the result bar, so the reader can see which period is on screen.
+            if (built.scope.isRecap) it.addProperty("period", "${built.scope.since} to ${built.scope.until}")
+        }
 
     private fun call(browser: JBCefBrowser, method: String, argument: Any) {
         val json = when (argument) {

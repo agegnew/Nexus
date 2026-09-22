@@ -4,6 +4,7 @@ import com.example.yasinreel.llm.FallbackDirector
 import com.example.yasinreel.model.Audience
 import com.example.yasinreel.model.Evidence
 import com.example.yasinreel.model.ProductModel
+import com.example.yasinreel.model.RecapFacts
 import com.example.yasinreel.model.Scene
 import com.example.yasinreel.model.SceneTemplate
 import com.example.yasinreel.model.Storyboard
@@ -11,6 +12,7 @@ import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
+import java.time.format.TextStyle
 import java.util.Locale
 
 /**
@@ -32,6 +34,13 @@ import java.util.Locale
  * Two entry points, matching the film's two paths:
  *  - [fromModel] when stage 2 produced a [ProductModel]
  *  - [fromEvidence] when there was no key and nothing but harvested facts
+ *
+ * Both read [Evidence.recap]. When it is set the user did not ask what the product is,
+ * they asked what happened to it between two dates, and those are different decks: a
+ * progress update opens on the period rather than on the problem, and it leads with the
+ * work instead of with the promise. Getting that wrong is worse than not offering ranges
+ * at all, because a deck titled "what we built last week" that is really a product tour
+ * is a deck that lies to the room it is shown in.
  */
 object DeckComposer {
 
@@ -39,14 +48,19 @@ object DeckComposer {
 
     fun fromModel(model: ProductModel, evidence: Evidence, audience: String): Deck {
         val stakeholder = audience == Audience.STAKEHOLDER
+        val recap = evidence.recap
         val slides = mutableListOf<Slide>()
 
         slides += slide(SlideLayout.TITLE, obj {
             put("productName", model.productName)
-            put("tagline", model.tagline)
+            put("tagline", if (recap != null) periodHeadline(recap, stakeholder) else model.tagline)
             put("project", evidence.projectName)
-            put("stamp", "${audienceLabel(audience)}  ·  ${LocalDate.now().format(STAMP)}")
-        }, if (stakeholder) {
+            put("stamp", "${audienceLabel(audience, recap)}  ·  ${stampFor(recap)}")
+        }, if (recap != null && stakeholder) {
+            "This covers ${spoken(recap)} only. Everything after this slide is work that was actually finished in that window, not a plan for it."
+        } else if (recap != null) {
+            "This covers ${spoken(recap)} only. Everything on the slides after this was read off the commits in that window, not out of the project as a whole."
+        } else if (stakeholder) {
             "Everything in this deck was worked out from the product itself, so every number on it is real rather than illustrative."
         } else {
             "This deck was generated from the codebase itself. Every number and every name on the following slides came out of the repository, not out of a template."
@@ -54,13 +68,33 @@ object DeckComposer {
 
         // Built last but inserted here, once the deck knows what it actually contains.
         val agendaAt = slides.size
-        slides += problemSlide(model, stakeholder)
+
+        /*
+         * The period takes the slot the problem statement holds in a product deck.
+         *
+         * Both are the "why are we here" slide, and a progress update already has its
+         * answer: this is the window, and this is what landed in it. Keeping the problem
+         * slide as well would open a fortnight's update by re-explaining the product to
+         * people who have been funding it for a year.
+         */
+        if (recap != null) {
+            slides += periodSlide(recap, stakeholder)
+            // Raw commit subjects, for the audience that reads them daily. A stakeholder
+            // gets the same period through the capabilities below, in product terms.
+            if (!stakeholder) workSlide(recap)?.let { slides += it }
+        } else {
+            slides += problemSlide(model, stakeholder)
+        }
 
         if (stakeholder) {
             slides += slide(SlideLayout.STATEMENT, obj {
-                put("statement", model.tagline)
-                put("attribution", "For ${model.targetUser}")
-            }, "This is the promise in one line. Everything after this slide is evidence for it.")
+                put("statement", if (recap != null) periodHeadline(recap, true) else model.tagline)
+                put("attribution", if (recap != null) spoken(recap).replaceFirstChar { it.uppercase() } else "For ${model.targetUser}")
+            }, if (recap != null) {
+                "One line for what the period was for. Everything after this slide is evidence for it."
+            } else {
+                "This is the promise in one line. Everything after this slide is evidence for it."
+            })
             journeySlide(model)?.let { slides += it }
         } else {
             architectureSlide(model)?.let { slides += it }
@@ -68,14 +102,28 @@ object DeckComposer {
             stackSlide(model)?.let { slides += it }
         }
 
-        capabilitySlides(model, stakeholder).forEach { slides += it }
-        statsSlide(model, evidence, stakeholder)?.let { slides += it }
+        // One capability slide in an update, because the work slide above is already a
+        // CAPABILITY_GRID and the validator allows two. Two product slides and no period
+        // slide would be the wrong deck surviving the trim.
+        capabilitySlides(model, stakeholder, recap).forEach { slides += it }
+        // A product deck counts the whole project. An update already counted the period
+        // on its own stats slide, and two sets of numbers on one deck invites the reader
+        // to work out which of them is the real one.
+        if (recap == null) statsSlide(model, evidence, stakeholder)?.let { slides += it }
         gapsSlide(model, stakeholder)?.let { slides += it }
 
         slides += slide(SlideLayout.CLOSING, obj {
-            put("headline", if (stakeholder) model.tagline else "${model.productName}, end to end")
+            put("headline", when {
+                recap != null -> periodHeadline(recap, stakeholder)
+                stakeholder -> model.tagline
+                else -> "${model.productName}, end to end"
+            })
             put("stamp", "${evidence.projectName}  ·  generated by Nexus on ${LocalDate.now().format(STAMP)}")
-        }, if (stakeholder) {
+        }, if (recap != null && stakeholder) {
+            "Close here. Everything on this deck was read off the work itself ${spoken(recap)}, so any of it can be traced back to something that was really built."
+        } else if (recap != null) {
+            "Close here. Every claim on this deck came out of the commits between ${recap.since} and ${recap.until}, so any of it can be traced back to one."
+        } else if (stakeholder) {
             "Close here. Everything shown was worked out from the product itself, so any of it can be traced back to the thing that was actually built."
         } else {
             "Close here. The deck and the video were both generated from this codebase, so anything on them can be traced back to a file."
@@ -86,7 +134,7 @@ object DeckComposer {
         return Deck(
             audience = audience,
             title = model.productName,
-            subtitle = model.tagline,
+            subtitle = if (recap != null) periodHeadline(recap, stakeholder) else model.tagline,
             projectName = evidence.projectName,
             slides = slides.take(Caps.MAX_SLIDES)
         )
@@ -113,7 +161,11 @@ object DeckComposer {
         return Deck(
             audience = audience,
             title = storyboard.theme.projectName.ifBlank { evidence.projectName },
-            subtitle = evidence.readme?.let { firstSentence(it) }.orEmpty(),
+            // FallbackDirector already opens a recap with the period and follows it with the
+            // commit subjects, so the slides are right; only the deck's own label is not.
+            subtitle = evidence.recap
+                ?.let { periodHeadline(it, stakeholder) }
+                ?: evidence.readme?.let { firstSentence(it) }.orEmpty(),
             projectName = evidence.projectName,
             slides = slides.take(Caps.MAX_SLIDES)
         )
@@ -205,14 +257,25 @@ object DeckComposer {
      * Six to a slide, because seven small cards is a slide nobody reads and two slides of
      * four is a deck that keeps its pace.
      */
-    private fun capabilitySlides(model: ProductModel, stakeholder: Boolean): List<Slide> {
+    private fun capabilitySlides(model: ProductModel, stakeholder: Boolean, recap: RecapFacts? = null): List<Slide> {
         val all = model.capabilities.filter { it.userFacingName.isNotBlank() }
         if (all.isEmpty()) return emptyList()
         val perSlide = if (all.size <= 6) all.size else 4
-        return all.chunked(perSlide).take(2).mapIndexed { index, chunk ->
+        // An update already spent one of its two grids on the work itself.
+        val maxSlides = if (recap != null) 1 else 2
+        return all.chunked(perSlide).take(maxSlides).mapIndexed { index, chunk ->
             slide(SlideLayout.CAPABILITY_GRID, obj {
-                put("eyebrow", if (index == 0) "What it does" else "What it does, continued")
-                put("heading", if (stakeholder) "What you can do with it" else "Capabilities")
+                put("eyebrow", when {
+                    recap != null -> "What it means"
+                    index == 0 -> "What it does"
+                    else -> "What it does, continued"
+                })
+                put("heading", when {
+                    recap != null && stakeholder -> "What you can do that you could not before"
+                    recap != null -> "What this period changed"
+                    stakeholder -> "What you can do with it"
+                    else -> "Capabilities"
+                })
                 put("cards", array(chunk) { capability ->
                     obj {
                         put("title", capability.userFacingName)
@@ -272,6 +335,123 @@ object DeckComposer {
             put("items", array(items) { primitive(it) })
         }, "Say this out loud rather than skipping it. Being the person who names the gaps is what makes the rest of the deck believable.")
     }
+
+    // ------------------------------------------------------------ period slides
+
+    /**
+     * The counted shape of the period, and the first thing the room wants.
+     *
+     * Four numbers, because [Caps.MAX_STATS] is four and because a fifth is the one
+     * nobody reads. Work that is not committed yet does not get a tile: it is a caveat
+     * rather than an achievement, so it goes into the sentence the presenter says, where
+     * it is heard rather than skimmed. The one exception is a period that deleted
+     * nothing, which frees the fourth tile for it.
+     */
+    private fun periodSlide(recap: RecapFacts, stakeholder: Boolean): Slide {
+        /*
+         * "Commits" is on the banned list, and rightly: it is a word about the tool, not
+         * about the work. The stakeholder labels are not softer names for the same thing,
+         * they are the same counts said in the room's own language, so the slide survives
+         * the scrub intact rather than losing its numbers to it.
+         */
+        val tiles = buildList {
+            add((if (stakeholder) "Separate changes" else "Commits") to group(recap.commits))
+            add((if (stakeholder) "Parts of the product" else "Files touched") to group(recap.filesTouched))
+            add((if (stakeholder) "New work written" else "Lines added") to "+${group(recap.linesAdded)}")
+            when {
+                recap.linesDeleted > 0 ->
+                    add((if (stakeholder) "Old work removed" else "Lines removed") to "-${group(recap.linesDeleted)}")
+                recap.uncommittedFiles > 0 ->
+                    add((if (stakeholder) "Still in progress" else "Not landed yet") to group(recap.uncommittedFiles))
+            }
+        }.take(Caps.MAX_STATS)
+
+        // Work in progress is a caveat rather than an achievement, so it is said out loud
+        // instead of shown as a tile. The film's offline director makes the same call.
+        val pending = when {
+            recap.uncommittedFiles == 0 -> ""
+            stakeholder -> " ${plural(recap.uncommittedFiles, "piece")} of this is still being worked on and is not finished, so say so."
+            else -> " ${plural(recap.uncommittedFiles, "file")} of it is not committed yet, so say so."
+        }
+        val who = when {
+            recap.authors.size == 1 -> " All of it by ${recap.authors.first()}."
+            recap.authors.size > 1 -> " Across ${recap.authors.size} people."
+            else -> ""
+        }
+        return slide(SlideLayout.STATS, obj {
+            put("eyebrow", "The period")
+            put("heading", readable(recap))
+            put("stats", array(tiles) { (label, value) ->
+                obj {
+                    put("value", value)
+                    put("label", label)
+                }
+            })
+        }, "Every number here was counted off the record rather than estimated.$who$pending")
+    }
+
+    /**
+     * What the commits themselves say, which beats anything this composer could infer.
+     *
+     * These are the developer's own words for the work. The film's offline director
+     * reaches for exactly the same list for exactly the same reason, and a stakeholder
+     * deck does not get this slide at all: a commit subject is written for the person who
+     * will run `git log`, and the validator would strip most of them anyway.
+     */
+    private fun workSlide(recap: RecapFacts): Slide? {
+        val subjects = recap.subjects.filter { it.isNotBlank() }.take(Caps.MAX_CARDS)
+        if (subjects.isEmpty()) return null
+        return slide(SlideLayout.CAPABILITY_GRID, obj {
+            put("eyebrow", "In the commits")
+            put("heading", "What was done")
+            put("cards", array(subjects) { subject ->
+                // No body on purpose: a commit subject is already the summary, and a grid
+                // of one-line cards reads faster than a grid of half-filled ones.
+                obj { put("title", DeckTheme.clip(subject, Caps.CARD_TITLE_ALONE)) }
+            })
+        }, "Newest first, in the words they were written in: " +
+            subjects.take(3).joinToString("; ") + ".")
+    }
+
+    /** The headline a period deck carries, on the title, the closing and the deck itself. */
+    private fun periodHeadline(recap: RecapFacts, stakeholder: Boolean): String =
+        if (stakeholder) "What we shipped ${spoken(recap)}" else "What changed ${spoken(recap)}"
+
+    /**
+     * The range as a person would say it out loud, collapsing the parts that repeat.
+     *
+     * "between 1 and 22 September 2026" rather than "between 2026-09-01 and 2026-09-22",
+     * because this text is read aloud in a meeting and spoken by the presenter, while the
+     * ISO form stays on the stats slide heading where it can be checked against git.
+     */
+    private fun spoken(recap: RecapFacts): String {
+        val from = date(recap.since)
+        val to = date(recap.until)
+        if (from == null || to == null) return "in this period"
+        if (from == to) return "on ${from.dayOfMonth} ${month(to)} ${to.year}"
+        val sameYear = from.year == to.year
+        val sameMonth = sameYear && from.month == to.month
+        val start = when {
+            sameMonth -> "${from.dayOfMonth}"
+            sameYear -> "${from.dayOfMonth} ${month(from)}"
+            else -> "${from.dayOfMonth} ${month(from)} ${from.year}"
+        }
+        return "between $start and ${to.dayOfMonth} ${month(to)} ${to.year}"
+    }
+
+    /** The exact bounds, for the slide a reader is allowed to check against the history. */
+    private fun readable(recap: RecapFacts): String = "${recap.since} to ${recap.until}"
+
+    /** A recap is stamped with the period it covers; a product deck with the day it was made. */
+    private fun stampFor(recap: RecapFacts?): String =
+        if (recap == null) LocalDate.now().format(STAMP) else readable(recap)
+
+    private fun date(value: String): LocalDate? = runCatching { LocalDate.parse(value.trim()) }.getOrNull()
+
+    private fun month(date: LocalDate): String = date.month.getDisplayName(TextStyle.FULL, Locale.ENGLISH)
+
+    private fun plural(count: Int, noun: String): String =
+        if (count == 1) "1 $noun" else "${group(count)} ${noun}s"
 
     // --------------------------------------------------------- evidence slides
 
@@ -359,8 +539,12 @@ object DeckComposer {
     private fun group(value: Int): String =
         value.toString().reversed().chunked(3).joinToString(",").reversed()
 
-    private fun audienceLabel(audience: String): String =
-        if (audience == Audience.STAKEHOLDER) "Stakeholder deck" else "Technical deck"
+    private fun audienceLabel(audience: String, recap: RecapFacts? = null): String = when {
+        recap != null && audience == Audience.STAKEHOLDER -> "Progress update"
+        recap != null -> "Engineering update"
+        audience == Audience.STAKEHOLDER -> "Stakeholder deck"
+        else -> "Technical deck"
+    }
 
     private fun firstSentence(readme: String): String {
         val clean = readme.lineSequence()
