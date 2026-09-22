@@ -453,6 +453,7 @@
 
 .architecture-zone {
   position: absolute;
+  overflow: hidden;
   z-index: 1;
   top: 190px;
   width: 250px;
@@ -1296,3 +1297,85 @@
   color: var(--surface-base);
   background: var(--project);
 }
+
+/* Named contents for the client and interface zones. The zone body is a fixed
+   280px on the 1000x620 canvas, so the lists are capped rather than scrolled. */
+
+.zone-list {
+  display: grid;
+  align-content: start;
+  gap: 1px;
+  margin: 0;
+  padding: 6px 10px;
+  list-style: none;
+}
+
+.zone-list li {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 6px;
+  border-radius: 4px;
+}
+
+.zone-list li:hover { background: oklch(24% 0.015 185 / 0.6); }
+
+.zone-list__icon { width: 20px; height: 20px; flex: 0 0 auto; }
+
+.zone-list__text { display: grid; min-width: 0; gap: 1px; }
+
+.zone-list__text strong {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 620;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zone-list__text small {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 10.5px;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zone-list__more {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-style: italic;
+}
+
+.zone-list--routes li { height: 24px; }
+
+.zone-list--routes code {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-family: var(--font-code);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zone-method {
+  flex: 0 0 auto;
+  min-width: 42px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: oklch(26% 0.015 185);
+  font-family: var(--font-code);
+  font-size: 9px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.zone-method--get { color: var(--frontend); }
+.zone-method--post { color: oklch(76% 0.15 145); }
+.zone-method--put,
+.zone-method--patch { color: var(--project); }
+.zone-method--delete { color: var(--unmatched); }
