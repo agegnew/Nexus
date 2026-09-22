@@ -1257,3 +1257,46 @@
   color: var(--surface-base);
   background: var(--project);
 }
+
+/* Trust: how much of the code behind a box has never been executed.
+
+   The map says what the system is made of. This says which of it is real. A service card
+   reading "12 handlers" looks the same whether all twelve are covered or none of them has
+   ever run, and the second case is the one worth knowing before you touch anything.
+
+   Only rendered when the IDE sends a reading, so a project with no coverage report sees the
+   diagram exactly as it was. */
+.architecture-trust {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 5px;
+}
+
+.architecture-trust__track {
+  flex: 1;
+  height: 5px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: oklch(32% 0.014 185);
+}
+
+.architecture-trust__fill {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  /* Eased, so a finished test run reads as the colour draining rather than as a redraw. */
+  transition: width 900ms cubic-bezier(0.22, 1, 0.36, 1), background 900ms ease;
+}
+
+.architecture-trust small {
+  flex: none;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.architecture-key__trust {
+  background: linear-gradient(90deg, rgb(62, 122, 78), rgb(184, 134, 59), rgb(196, 68, 58));
+}

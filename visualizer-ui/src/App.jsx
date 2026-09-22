@@ -261,6 +261,7 @@ export default function App() {
   const [flowInstance, setFlowInstance] = useState(null)
   const [activeView, setActiveView] = useState('code')
   const [activityMeta, setActivityMeta] = useState(() => window.__CODE_VISUALIZER_ACTIVITY_META__ ?? null)
+  const [trust, setTrust] = useState(() => window.__CODE_VISUALIZER_TRUST__ ?? null)
 
   useEffect(() => {
     const receiveGraph = (event) => {
@@ -270,11 +271,15 @@ export default function App() {
     }
     // The IDE pushes the activity scopes alongside each graph, so the dropdown needs no setup.
     const receiveActivityMeta = (event) => setActivityMeta(event.detail)
+    // Arrives whenever a run finishes, so the map recolours without being asked.
+    const receiveTrust = (event) => setTrust(event.detail)
     window.addEventListener('code-visualizer:graph', receiveGraph)
     window.addEventListener('code-visualizer:activity-meta', receiveActivityMeta)
+    window.addEventListener('code-visualizer:trust', receiveTrust)
     return () => {
       window.removeEventListener('code-visualizer:graph', receiveGraph)
       window.removeEventListener('code-visualizer:activity-meta', receiveActivityMeta)
+      window.removeEventListener('code-visualizer:trust', receiveTrust)
     }
   }, [])
 
@@ -445,7 +450,7 @@ export default function App() {
             </div>
           </section>
         )}>
-          <ArchitectureDiagram analysis={analysis} />
+          <ArchitectureDiagram analysis={analysis} trust={trust} />
         </Suspense>
       )}
 

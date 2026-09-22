@@ -40,23 +40,28 @@ export function requestActivity({ since, until, scope, mine, uncommitted }) {
   })
 }
 
-export function subscribe({ onGraph, onStatus, onHost, onActivity, onActivityMeta }) {
+export function subscribe({ onGraph, onStatus, onHost, onActivity, onActivityMeta, onTrust }) {
   const graph = (event) => onGraph(event.detail)
   const status = (event) => onStatus(event.detail?.state)
   const host = () => onHost()
   const activity = (event) => onActivity?.(event.detail)
   const meta = (event) => onActivityMeta?.(event.detail)
+  // Which code has actually executed. Optional: the plugin only sends it when a
+  // coverage report exists, and the map renders unchanged when it never arrives.
+  const trust = (event) => onTrust?.(event.detail)
   window.addEventListener('code-visualizer:graph', graph)
   window.addEventListener('code-visualizer:status', status)
   window.addEventListener('code-visualizer:host-ready', host)
   window.addEventListener('code-visualizer:activity', activity)
   window.addEventListener('code-visualizer:activity-meta', meta)
+  window.addEventListener('code-visualizer:trust', trust)
   return () => {
     window.removeEventListener('code-visualizer:graph', graph)
     window.removeEventListener('code-visualizer:status', status)
     window.removeEventListener('code-visualizer:host-ready', host)
     window.removeEventListener('code-visualizer:activity', activity)
     window.removeEventListener('code-visualizer:activity-meta', meta)
+    window.removeEventListener('code-visualizer:trust', trust)
   }
 }
 

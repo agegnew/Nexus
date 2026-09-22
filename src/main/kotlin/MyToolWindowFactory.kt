@@ -2,6 +2,7 @@ package com.example
 
 import com.example.activity.ActivityRequest
 import com.example.activity.ActivityService
+import com.example.trust.TrustGraphBridge
 import com.google.gson.Gson
 import com.google.gson.JsonParser
 import com.intellij.openapi.application.ApplicationManager
@@ -74,6 +75,9 @@ class MyToolWindowFactory : ToolWindowFactory {
                         installBridge(browser, query)
                         pushActivityMeta(project, browser)
                         analyzeProject(project, browser)
+                        // Colours the diagram by what has actually executed. Additive: the
+                        // page ignores the event if it does not handle it.
+                        TrustGraphBridge.attach(project, browser)
                     }
                 },
                 browser.cefBrowser
