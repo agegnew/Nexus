@@ -87,9 +87,10 @@ class ReelToolWindowFactory : ToolWindowFactory, DumbAware {
             // Created before the page is loaded: the message router is installed when the
             // browser is, so a query made later would never reach the running page.
             // The cast picks the JBCefBrowserBase overload, the JBCefBrowser one is deprecated.
+            val page = NexusPage.of(browser)
             val query = JBCefJSQuery.create(browser as JBCefBrowserBase)
             query.addHandler { payload ->
-                handleBridgeMessage(project, browser, payload)
+                handleBridgeMessage(project, page, payload)
                 null
             }
 
@@ -150,7 +151,11 @@ class ReelToolWindowFactory : ToolWindowFactory, DumbAware {
         logger.info("Nexus Reel bridge injected into the player page")
     }
 
-    private fun handleBridgeMessage(project: Project, browser: JBCefBrowser, payload: String?) {
+    /**
+     * Public because the Map page embeds the player as a panel and drives this same
+     * router over that frame. One router, two places it can be shown.
+     */
+    fun handleBridgeMessage(project: Project, page: NexusPage, payload: String?) {
         val message = runCatching { JsonParser.parseString(payload.orEmpty()) as? JsonObject }
             .onFailure { logger.warn("Nexus Reel could not parse a bridge message: $payload", it) }
             .getOrNull() ?: return
@@ -158,19 +163,19 @@ class ReelToolWindowFactory : ToolWindowFactory, DumbAware {
         when (val type = message.stringOrNull("type")) {
             "generate" -> generate(
                 project,
-                browser,
+                page,
                 message.stringOrNull("audience") ?: Audience.TECHNICAL,
                 ReelScope.from(message)
             )
-            "scopes" -> sendScopes(project, browser)
+            "scopes" -> sendScopes(project, page)
             "openFile" -> openInEditor(project, message.stringOrNull("file"), message.intOrNull("line") ?: 1)
             "export" -> export(
                 project,
-                browser,
+                page,
                 message.stringOrNull("audience") ?: Audience.TECHNICAL,
                 message.stringOrNull("format") ?: FORMAT_HTML
             )
-            "toolchain" -> toolchain(project, browser)
+            "toolchain" -> toolchain(project, page)
             "reveal" -> revealInFinder(message.stringOrNull("path"))
             "ready" -> logger.info("Nexus Reel player reported ready")
             else -> logger.warn("Nexus Reel ignored an unknown bridge message of type $type")
@@ -194,21 +199,21 @@ class ReelToolWindowFactory : ToolWindowFactory, DumbAware {
     }
 
     /** The player asks for the scope list once it loads, so the area picker matches the project. */
-    private fun sendScopes(project: Project, browser: JBCefBrowser) {
+    private fun sendScopes(project: Project, page: NexusPage) {
         val areas = runCatching { ChangedFiles.areas(project) }.getOrDefault(emptyList())
         val detail = gson.toJson(mapOf("areas" to areas))
-        dispatch(browser, EVENT_SCOPES, detail)
+        dispatch(page, EVENT_SCOPES, detail)
     }
 
-    private fun generate(project: Project, browser: JBCefBrowser, audience: String, scope: ReelScope) {
+    private fun generate(project: Project, page: NexusPage, audience: String, scope: ReelScope) {
         logger.info("Nexus Reel generating the $audience cut (${scope.kind}) on request from the player")
         ReelPipeline.getInstance(project).generate(
             audience = audience,
             scope = scope,
-            onProgress = { message -> dispatch(browser, EVENT_PROGRESS, detail(audience, message)) },
-            onDone = { storyboard, clips -> deliver(project, browser, storyboard, clips) },
-            onError = { message -> dispatch(browser, EVENT_ERROR, detail(audience, message)) },
-            onNotice = { diagnosis, aiWrote -> notice(browser, audience, diagnosis, aiWrote) },
+            onProgress = { message -> dispatch(page, EVENT_PROGRESS, detail(audience, message)) },
+            onDone = { storyboard, clips -> deliver(project, page, storyboard, clips) },
+            onError = { message -> dispatch(page, EVENT_ERROR, detail(audience, message)) },
+            onNotice = { diagnosis, aiWrote -> notice(page, audience, diagnosis, aiWrote) },
             targetMs = targetMs()
         )
     }
@@ -233,7 +238,7 @@ class ReelToolWindowFactory : ToolWindowFactory, DumbAware {
      */
     private fun deliver(
         project: Project,
-        browser: JBCefBrowser,
+        page: NexusPage,
         storyboard: Storyboard,
         clips: List<TtsClient.SceneAudio>
     ) {
@@ -255,7 +260,7 @@ class ReelToolWindowFactory : ToolWindowFactory, DumbAware {
             )
         }
         payload.add("audio", audio)
-        dispatch(browser, EVENT_STORYBOARD, gson.toJson(payload))
+        dispatch(page, EVENT_STORYBOARD, gson.toJson(payload))
     }
 
     /**
@@ -265,7 +270,7 @@ class ReelToolWindowFactory : ToolWindowFactory, DumbAware {
      * working key, understand the project with it and still fall back because directing
      * threw, and that reel is just as much a machine written one.
      */
-    private fun notice(browser: JBCefBrowser, audience: String, diagnosis: KeyDiagnosis, aiWrote: Boolean) {
+    private fun notice(page: NexusPage, audience: String, diagnosis: KeyDiagnosis, aiWrote: Boolean) {
         val ran = aiWrote && diagnosis.aiRan
 
         // Three cases, and only the middle one needs words of its own. KeyDiagnosis can
@@ -297,7 +302,7 @@ class ReelToolWindowFactory : ToolWindowFactory, DumbAware {
                 "sources tried: ${diagnosis.tried}"
         )
         dispatch(
-            browser,
+            page,
             EVENT_NOTICE,
             gson.toJson(
                 mapOf(
@@ -312,10 +317,10 @@ class ReelToolWindowFactory : ToolWindowFactory, DumbAware {
         )
     }
 
-    private fun export(project: Project, browser: JBCefBrowser, audience: String, format: String) {
+    private fun export(project: Project, page: NexusPage, audience: String, format: String) {
         val storyboard = storyboardFor(project, audience)
         if (storyboard == null) {
-            dispatch(browser, EVENT_EXPORT_ERROR, exportDetail(audience, format, "Build the $audience cut first, then export it."))
+            dispatch(page, EVENT_EXPORT_ERROR, exportDetail(audience, format, "Build the $audience cut first, then export it."))
             return
         }
 
@@ -323,18 +328,18 @@ class ReelToolWindowFactory : ToolWindowFactory, DumbAware {
         if (format == FORMAT_MP4) {
             exporter.exportMp4(
                 storyboard,
-                onProgress = { m -> dispatch(browser, EVENT_EXPORT_PROGRESS, exportDetail(audience, format, m)) },
-                onDone = { file -> dispatch(browser, EVENT_EXPORT_DONE, exportDetail(audience, format, "Saved the video.", file)) },
-                onError = { m -> dispatch(browser, EVENT_EXPORT_ERROR, exportDetail(audience, format, m)) }
+                onProgress = { m -> dispatch(page, EVENT_EXPORT_PROGRESS, exportDetail(audience, format, m)) },
+                onDone = { file -> dispatch(page, EVENT_EXPORT_DONE, exportDetail(audience, format, "Saved the video.", file)) },
+                onError = { m -> dispatch(page, EVENT_EXPORT_ERROR, exportDetail(audience, format, m)) }
             )
             return
         }
 
-        dispatch(browser, EVENT_EXPORT_PROGRESS, exportDetail(audience, FORMAT_HTML, "Writing a standalone page."))
+        dispatch(page, EVENT_EXPORT_PROGRESS, exportDetail(audience, FORMAT_HTML, "Writing a standalone page."))
         exporter.exportHtml(
             storyboard,
-            onDone = { file -> dispatch(browser, EVENT_EXPORT_DONE, exportDetail(audience, FORMAT_HTML, "Saved the page.", file)) },
-            onError = { m -> dispatch(browser, EVENT_EXPORT_ERROR, exportDetail(audience, FORMAT_HTML, m)) }
+            onDone = { file -> dispatch(page, EVENT_EXPORT_DONE, exportDetail(audience, FORMAT_HTML, "Saved the page.", file)) },
+            onError = { m -> dispatch(page, EVENT_EXPORT_ERROR, exportDetail(audience, FORMAT_HTML, m)) }
         )
     }
 
@@ -345,7 +350,7 @@ class ReelToolWindowFactory : ToolWindowFactory, DumbAware {
      * the background, so the player asks again every time the menu is opened rather than
      * once at load.
      */
-    private fun toolchain(project: Project, browser: JBCefBrowser) {
+    private fun toolchain(project: Project, page: NexusPage) {
         val chain = runCatching { ReelExporter.getInstance(project).toolchain() }
             .onFailure { logger.warn("Nexus Reel could not inspect the export toolchain", it) }
             .getOrNull() ?: ReelExporter.Toolchain(
@@ -354,7 +359,7 @@ class ReelToolWindowFactory : ToolWindowFactory, DumbAware {
             canMp4 = false,
             detail = "Video export is unavailable in this IDE."
         )
-        dispatch(browser, EVENT_TOOLCHAIN, gson.toJson(chain))
+        dispatch(page, EVENT_TOOLCHAIN, gson.toJson(chain))
     }
 
     /**
@@ -387,18 +392,8 @@ class ReelToolWindowFactory : ToolWindowFactory, DumbAware {
      * [detailJson] is always produced by Gson rather than string concatenation, so a
      * quote or a newline in a narration line cannot break out and corrupt the script.
      */
-    private fun dispatch(browser: JBCefBrowser, event: String, detailJson: String) {
-        ApplicationManager.getApplication().invokeLater(
-            Runnable {
-                val cefBrowser = browser.cefBrowser
-                cefBrowser.executeJavaScript(
-                    "window.dispatchEvent(new CustomEvent('$event', { detail: $detailJson }));",
-                    cefBrowser.url,
-                    0
-                )
-            },
-            ModalityState.any()
-        )
+    private fun dispatch(page: NexusPage, event: String, detailJson: String) {
+        page.run("window.dispatchEvent(new CustomEvent('$event', { detail: $detailJson }));")
     }
 
     private fun openInEditor(project: Project, reference: String?, line: Int) {

@@ -256,3 +256,6 @@ body {
 @media (prefers-reduced-motion: reduce) {
   * { animation-duration: .001ms !important; transition-duration: .001ms !important; }
 }
+
+/* Embedded in the Map page, which already carries the project name and the views. */
+:root[data-embedded] .deck__head { display: none; }

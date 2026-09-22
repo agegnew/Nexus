@@ -51,6 +51,13 @@ class MyToolWindowFactory : ToolWindowFactory {
 
             val browser = JBCefBrowser()
             browserToDispose = browser
+
+            // Nexus Reel and Nexus Deck are panels inside this page now, not tool window
+            // tabs of their own, so the product has one row of views instead of two. They
+            // attach their own bridge to this browser and everything they add lives in
+            // NexusEmbed; nothing below this line knows or cares that they are there.
+            // Must be before loadURL: CEF installs the message router with the browser.
+            com.example.yasinreel.render.NexusEmbed.attach(project, browser)
             val encodedProjectName = URLEncoder.encode(projectName, StandardCharsets.UTF_8)
             val encodedProjectPath = URLEncoder.encode(projectPath, StandardCharsets.UTF_8)
             val visualizerUrl =

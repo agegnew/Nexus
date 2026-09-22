@@ -183,6 +183,45 @@
   min-height: 0;
 }
 
+/*
+ * The film and the deck, each a page the plugin serves in a frame of its own.
+ *
+ * They carry their own light theme on purpose: they are what gets exported, shown in a
+ * meeting and sent to people, so they look like the artefact rather than like this panel.
+ */
+.panel-workspace {
+  position: relative;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
+}
+
+.panel-workspace[hidden] { display: none; }
+
+.panel-frame {
+  flex: 1 1 auto;
+  min-height: 0;
+  border: 0;
+  width: 100%;
+  background: #F3F5F9;
+}
+
+.panel-workspace--empty {
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+}
+
+.panel-missing {
+  display: grid;
+  gap: 8px;
+  max-width: 46ch;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.panel-missing strong { color: var(--text-primary); font-size: 15px; }
+
 .architecture-workspace {
   container-type: inline-size;
   position: relative;

@@ -1140,3 +1140,6 @@ body {
   color: var(--text-muted, #79859A);
   cursor: pointer;
 }
+
+/* Embedded in the Map page, which already carries the project name and the views. */
+:root[data-embedded] .reel__head { display: none; }

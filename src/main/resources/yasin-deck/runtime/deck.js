@@ -9,6 +9,16 @@
 (function () {
   'use strict';
 
+  /*
+   * Shown as a panel inside the Map page rather than as a window of its own.
+   *
+   * The page keeps its own header for the standalone and exported cases, where nothing
+   * else says what you are looking at. Embedded, the page above already carries the
+   * project name and the row of views, so repeating it is two headers deep in a tool
+   * window that is narrow to begin with.
+   */
+  if (window.parent !== window) document.documentElement.setAttribute('data-embedded', '');
+
   var dom = {};
   var thumbs = [];
   var busy = false;

@@ -3,6 +3,7 @@ package com.example.yasinreel.deck
 import com.example.yasinreel.harvest.ChangedFiles
 import com.example.yasinreel.model.Audience
 import com.example.yasinreel.model.ReelScope
+import com.example.yasinreel.render.NexusPage
 import com.example.yasinreel.render.ReelServer
 import com.google.gson.Gson
 import com.google.gson.JsonObject
@@ -66,9 +67,10 @@ class DeckToolWindowFactory : ToolWindowFactory, DumbAware {
 
             // Created before the page loads: the message router is installed with the
             // browser, so a query made afterwards would never reach the running page.
+            val page = NexusPage.of(browser)
             val query = JBCefJSQuery.create(browser as JBCefBrowserBase)
             query.addHandler { payload ->
-                handle(project, browser, payload)
+                handle(project, page, payload)
                 null
             }
 
@@ -77,13 +79,7 @@ class DeckToolWindowFactory : ToolWindowFactory, DumbAware {
                     override fun onLoadEnd(cefBrowser: CefBrowser, frame: CefFrame, httpStatusCode: Int) {
                         if (!frame.isMain) return
                         injectBridge(cefBrowser, query)
-                        call(
-                            browser, "ready",
-                            JsonObject().apply {
-                                addProperty("projectName", project.name)
-                                addProperty("hint", "Ready. The first deck also reads the project; the second is quick.")
-                            }
-                        )
+                        ready(project, page)
                     }
                 },
                 browser.cefBrowser
@@ -131,7 +127,11 @@ class DeckToolWindowFactory : ToolWindowFactory, DumbAware {
         logger.info("Nexus Deck bridge injected into the deck page")
     }
 
-    private fun handle(project: Project, browser: JBCefBrowser, payload: String?) {
+    /**
+     * Public because the Map page embeds the deck as a panel and drives this same router
+     * over that frame. One router, two places it can be shown.
+     */
+    fun handle(project: Project, page: NexusPage, payload: String?) {
         val message = runCatching { JsonParser.parseString(payload.orEmpty()) as? JsonObject }
             .onFailure { logger.warn("Nexus Deck could not parse a bridge message: $payload", it) }
             .getOrNull() ?: return
@@ -139,13 +139,13 @@ class DeckToolWindowFactory : ToolWindowFactory, DumbAware {
         when (val type = message.get("type")?.asString) {
             "build" -> build(
                 project,
-                browser,
+                page,
                 message.get("audience")?.asString ?: Audience.TECHNICAL,
                 // Read by ReelScope itself, so the Deck tab and the Reel tab cannot end up
                 // with two readings of the same panel.
                 ReelScope.from(message)
             )
-            "scopes" -> sendScopes(project, browser)
+            "scopes" -> sendScopes(project, page)
             "open" -> withDeck(project) { file ->
                 runCatching { BrowserUtil.browse(file) }
                     .onFailure { logger.warn("Nexus Deck could not open $file", it) }
@@ -165,23 +165,39 @@ class DeckToolWindowFactory : ToolWindowFactory, DumbAware {
         ApplicationManager.getApplication().invokeLater({ action(file) }, ModalityState.any())
     }
 
-    /** The area list is the project's own modules, so the tab asks rather than guessing. */
-    private fun sendScopes(project: Project, browser: JBCefBrowser) {
-        val areas = runCatching { ChangedFiles.areas(project) }.getOrDefault(emptyList())
-        call(browser, "scopes", JsonParser.parseString(Gson().toJson(mapOf("areas" to areas))).asJsonObject)
+    /**
+     * The handshake: what the page is looking at, and how long the first build will take.
+     *
+     * Public because the embedded panel is loaded by the Map page rather than by this
+     * factory, so somebody else's load handler is the one that knows the deck is on screen.
+     */
+    fun ready(project: Project, page: NexusPage) {
+        call(
+            page, "ready",
+            JsonObject().apply {
+                addProperty("projectName", project.name)
+                addProperty("hint", "Ready. The first deck also reads the project; the second is quick.")
+            }
+        )
     }
 
-    private fun build(project: Project, browser: JBCefBrowser, audience: String, scope: ReelScope) {
+    /** The area list is the project's own modules, so the tab asks rather than guessing. */
+    private fun sendScopes(project: Project, page: NexusPage) {
+        val areas = runCatching { ChangedFiles.areas(project) }.getOrDefault(emptyList())
+        call(page, "scopes", JsonParser.parseString(Gson().toJson(mapOf("areas" to areas))).asJsonObject)
+    }
+
+    private fun build(project: Project, page: NexusPage, audience: String, scope: ReelScope) {
         logger.info("Nexus Deck building the $audience deck (${scope.kind}) on request from the tab")
         DeckPipeline.getInstance(project).generate(
             audience = audience,
             scope = scope,
-            onProgress = { message -> call(browser, "progress", message) },
+            onProgress = { message -> call(page, "progress", message) },
             onDone = { built ->
                 delivered[project.locationHash] = built.file
-                call(browser, "done", payloadOf(built, audience))
+                call(page, "done", payloadOf(built, audience))
             },
-            onError = { message -> call(browser, "failed", message) }
+            onError = { message -> call(page, "failed", message) }
         )
     }
 
@@ -200,24 +216,15 @@ class DeckToolWindowFactory : ToolWindowFactory, DumbAware {
             if (built.scope.isRecap) it.addProperty("period", "${built.scope.since} to ${built.scope.until}")
         }
 
-    private fun call(browser: JBCefBrowser, method: String, argument: Any) {
+    private fun call(page: NexusPage, method: String, argument: Any) {
         val json = when (argument) {
             is JsonObject -> argument.toString()
             is String -> com.google.gson.JsonPrimitive(argument).toString()
             else -> com.google.gson.Gson().toJson(argument)
         }
-        ApplicationManager.getApplication().invokeLater(
-            Runnable {
-                val cefBrowser = browser.cefBrowser
-                // Guarded in the page as well as here: a message can arrive between the
-                // browser being created and deck.js having run.
-                cefBrowser.executeJavaScript(
-                    "if (window.NexusDeck && window.NexusDeck.$method) window.NexusDeck.$method($json);",
-                    cefBrowser.url,
-                    0
-                )
-            },
-            ModalityState.any()
-        )
+        // Guarded in the page as well as here: a message can arrive between the browser
+        // being created and deck.js having run, and an embedded panel can be unmounted
+        // between a build being asked for and it finishing.
+        page.run("if (window.NexusDeck && window.NexusDeck.$method) window.NexusDeck.$method($json);")
     }
 }

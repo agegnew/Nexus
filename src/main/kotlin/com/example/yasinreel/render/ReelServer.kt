@@ -64,6 +64,15 @@ class ReelServer : Disposable {
      */
     fun deckUrl(): String = baseUrl() + "/" + DECK_PREFIX + "/index.html"
 
+    fun reelUrl(): String = baseUrl() + "/" + REEL_PREFIX + "/index.html"
+
+    /** The port actually bound, which is [PREFERRED_PORT] unless something already had it. */
+    @Synchronized
+    fun port(): Int {
+        val running = server ?: start().also { server = it }
+        return running.address.port
+    }
+
     /**
      * Serves the built visualizer-ui on the port its own tool window already asks for.
      *
@@ -81,6 +90,9 @@ class ReelServer : Disposable {
         val started = runCatching {
             HttpServer.create(InetSocketAddress(InetAddress.getLoopbackAddress(), VITE_PORT), 0).also {
                 it.createContext("/") { exchange -> serve(exchange, MAP_ROOT) }
+                // The film and the deck answer here too, so the page on this port can hold
+                // them in an iframe with no cross origin anything and no port to discover.
+                mount(it)
                 it.executor = null
                 it.start()
             }
@@ -93,18 +105,62 @@ class ReelServer : Disposable {
         }
     }
 
+    /**
+     * Tries one known port before falling back to whatever the OS has spare.
+     *
+     * The port used to be ephemeral on purpose, and that was right while the only thing
+     * loading these pages was a tool window that had just been told the URL. Now the Map
+     * page embeds the film and the deck, and when a developer is running `npm run dev`
+     * that page is served by Vite, which has to proxy to us and therefore has to be
+     * configured with a number in advance. A fixed first choice makes that configuration
+     * possible; the fallback makes a second IDE window still work, at the cost of the
+     * dev-server proxy, which is the right thing to lose of the two.
+     */
     private fun start(): HttpServer {
-        // Port 0 asks the OS for a free ephemeral port, so we never collide with
-        // another IDE window or with Vite on 5173.
-        val http = HttpServer.create(InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0)
+        val http = bind(PREFERRED_PORT) ?: bind(0) ?: error("Nexus could not open a loopback port")
         http.createContext("/") { exchange -> serve(exchange, RESOURCE_ROOT) }
-        http.createContext("/" + DECK_PREFIX) { exchange -> serve(exchange, DECK_ROOT, DECK_PREFIX + "/") }
-        // One copy of the code both tabs share, reachable from both by absolute path.
-        http.createContext("/" + SHARED_PREFIX) { exchange -> serve(exchange, SHARED_ROOT, SHARED_PREFIX + "/") }
+        mount(http)
         http.executor = null
         http.start()
         logger.info("Nexus Reel server listening on 127.0.0.1:${http.address.port}")
         return http
+    }
+
+    private fun bind(port: Int): HttpServer? = runCatching {
+        HttpServer.create(InetSocketAddress(InetAddress.getLoopbackAddress(), port), 0)
+    }.onFailure {
+        if (port != 0) logger.info("Nexus could not take port $port, asking the OS for a spare one")
+    }.getOrNull()
+
+    /**
+     * The routes both servers answer, so a page is served the same whichever port it
+     * came from. Only `/` differs: the main server roots on the film, the Vite-port
+     * server roots on the Map.
+     */
+    private fun mount(http: HttpServer) {
+        http.createContext("/" + REEL_PREFIX) { exchange -> serve(exchange, RESOURCE_ROOT, REEL_PREFIX + "/") }
+        http.createContext("/" + DECK_PREFIX) { exchange -> serve(exchange, DECK_ROOT, DECK_PREFIX + "/") }
+        // One copy of the code both tabs share, reachable from both by absolute path.
+        http.createContext("/" + SHARED_PREFIX) { exchange -> serve(exchange, SHARED_ROOT, SHARED_PREFIX + "/") }
+        // How a page that was served by Vite finds the plugin. Same origin when we serve
+        // the Map ourselves, and proxied by vite.config.js when the dev server is running.
+        http.createContext("/nexus.json") { exchange -> describe(exchange) }
+    }
+
+    /** Announces where the plugin is answering, so an embedded page never guesses a port. */
+    private fun describe(exchange: HttpExchange) {
+        try {
+            val body = """{"base":"${baseUrl()}","reel":"${reelUrl()}","deck":"${deckUrl()}"}"""
+                .toByteArray(Charsets.UTF_8)
+            exchange.responseHeaders.add("Content-Type", "application/json")
+            exchange.responseHeaders.add("Cache-Control", "no-store")
+            exchange.sendResponseHeaders(200, body.size.toLong())
+            exchange.responseBody.use { it.write(body) }
+        } catch (e: IOException) {
+            logger.warn("Nexus could not answer ${exchange.requestURI}", e)
+        } finally {
+            exchange.close()
+        }
     }
 
     private fun serve(exchange: HttpExchange, root: String, strip: String = "") {
@@ -190,6 +246,21 @@ class ReelServer : Disposable {
         /** The deck tab, served under [DECK_PREFIX] on the same port as the reel. */
         private const val DECK_ROOT = "yasin-deck"
         private const val DECK_PREFIX = "deck"
+
+        /**
+         * The film also answers under a prefix, not only at the root.
+         *
+         * The root still works and is what the standalone Reel tab loads. The prefix is
+         * what an embedded page asks for, so the film and the deck are addressed the same
+         * way from the Map page rather than one of them being "whatever is left over".
+         */
+        private const val REEL_PREFIX = "reel"
+
+        /**
+         * Asked for first, so `vite.config.js` has something to proxy to. Not reserved by
+         * IANA and one past the dev server's own, which keeps the pair obvious.
+         */
+        private const val PREFERRED_PORT = 5174
 
         /**
          * Code both tabs load, and the reason the date range means one thing in this plugin.
