@@ -40,19 +40,22 @@ object SlideLayout {
     const val STATS = "stats"
     const val STACK = "stack"
     const val JOURNEY = "journey"
+
+    /** The same name the film's scene has, because it is the same thing drawn twice. */
+    const val PRODUCT_UI = "product-ui"
     const val GAPS = "gaps"
     const val CLOSING = "closing"
 
     val ALL = listOf(
         TITLE, AGENDA, PROBLEM, STATEMENT, CAPABILITY_GRID, ARCH_LAYERS,
-        FLOW, STATS, STACK, JOURNEY, GAPS, CLOSING
+        FLOW, STATS, STACK, JOURNEY, PRODUCT_UI, GAPS, CLOSING
     )
 
     /** Layouts that assume the reader reads code, so never used in a stakeholder deck. */
     val TECHNICAL_ONLY = setOf(ARCH_LAYERS, STACK)
 
     /** Layouts that assume the reader does not, so never used in a technical deck. */
-    val STAKEHOLDER_ONLY = setOf(JOURNEY)
+    val STAKEHOLDER_ONLY = setOf(JOURNEY, PRODUCT_UI)
 
     /**
      * How many of each a deck may carry.
@@ -63,7 +66,7 @@ object SlideLayout {
     val MAX_REPEATS: Map<String, Int> = mapOf(
         TITLE to 1, AGENDA to 1, CLOSING to 1, PROBLEM to 1,
         STATS to 1, GAPS to 1, JOURNEY to 1, ARCH_LAYERS to 1,
-        STACK to 1, STATEMENT to 2, FLOW to 2, CAPABILITY_GRID to 2
+        STACK to 1, PRODUCT_UI to 1, STATEMENT to 2, FLOW to 2, CAPABILITY_GRID to 2
     )
 }
 
@@ -127,6 +130,20 @@ object Caps {
     const val STATEMENT = 130
     const val BODY = 240
     const val NOTES = 600
+
+    /**
+     * The recreated interface.
+     *
+     * These are not editorial limits like the ones above, which stop a director writing
+     * a paragraph into a slot sized for a number. Nothing here was written by anyone: the
+     * strings are the product's own and were already capped when they were read. What is
+     * left is geometry, so these say how much of a real sidebar fits in a drawn one.
+     */
+    const val UI_ROW = 24
+    const val UI_BADGE = 10
+    const val UI_BRAND = 22
+    const val UI_BRAND_SUB = 34
+    const val UI_STAGE = 16
 
     const val MAX_SLIDES = 14
     const val MIN_SLIDES = 6

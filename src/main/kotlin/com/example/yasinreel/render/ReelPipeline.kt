@@ -333,7 +333,9 @@ class ReelPipeline(private val project: Project) {
     ): Directed {
         if (engine != null && model != null) {
             try {
-                val directed = engine.direct(model, evidence, audience, targetMs)
+                val directed = FallbackDirector.withProductUi(
+                    engine.direct(model, evidence, audience, targetMs), evidence
+                )
                 onProgress("Directed the $audience cut from the product model.")
                 val result = checked(
                     directed, evidence, targetMs, onProgress,

@@ -11,6 +11,7 @@ import com.example.yasinreel.model.FileRef
 import com.example.yasinreel.model.LanguageStat
 import com.example.yasinreel.model.NotableFile
 import com.example.yasinreel.model.Palette
+import com.example.yasinreel.model.ProductUi
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import com.intellij.openapi.diagnostic.Logger
@@ -167,7 +168,10 @@ object EvidenceHarvester {
             entryPoints = section("entry-points", emptyList<FileRef>()) { entryPoints(scan, projectPath) },
             chains = section("chains", emptyList<Chain>()) { ChainDetector.detect(project, graph) },
             palette = section("palette", Palette(emptyList(), null)) { BrandPalette.detect(project) },
-            notableFiles = section("notable-files", emptyList<NotableFile>()) { notableFiles(scan) }
+            notableFiles = section("notable-files", emptyList<NotableFile>()) { notableFiles(scan) },
+            // Walks the whole project even for a recap: the work was done in a date range,
+            // the product it was done on was not.
+            ui = section<ProductUi?>("interface", null) { UiSources.productUi(project)?.takeIf { it.usable } }
         )
 
         logger.info(
@@ -448,7 +452,10 @@ object EvidenceHarvester {
         ),
         notableFiles = evidence.notableFiles.map {
             it.copy(path = SecretScrubber.scrub(it.path), head = SecretScrubber.scrub(it.head))
-        }
+        },
+        // The labels are the product's own words and carry nothing to redact; the path
+        // they came from is a path, and every path in this file goes through the scrubber.
+        ui = evidence.ui?.let { it.copy(source = it.source?.let(SecretScrubber::scrub)) }
     )
 
     /**

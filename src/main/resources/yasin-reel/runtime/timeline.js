@@ -47,6 +47,7 @@ window.ReelTimeline = (function () {
       // generic word "The journey" in the transport under a frame that said otherwise.
       'flow-trace': slots.name || slots.heading || 'Traced path',
       'journey': slots.name || slots.heading || 'The journey',
+      'product-ui': slots.heading || slots.brand || 'The product',
       'outro': slots.cta || slots.headline || 'Wrap'
     };
     var label = named[scene.template] || scene.template || ('Scene ' + (index + 1));
@@ -421,6 +422,18 @@ window.ReelTimeline = (function () {
       }
 
       var built = builder(scene.slots || {}, storyboard.theme || {}, ctx);
+      /*
+       * A builder that decides it has nothing honest to draw says so by returning
+       * nothing, and the film carries the sentence instead of an empty frame. The
+       * recreated interface is the one that can reach this: its content is measured
+       * rather than written, so it is the one scene that can legitimately find that
+       * what it was given does not add up to a screen.
+       */
+      if (!built || !built.el) {
+        built = window.ReelScenes['big-statement'](
+          { statement: scene.narration || '', context: '' }, storyboard.theme || {}, ctx
+        );
+      }
       root.appendChild(built.el);
 
       /*

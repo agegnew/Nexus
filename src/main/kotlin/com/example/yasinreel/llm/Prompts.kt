@@ -174,6 +174,11 @@ They want the answer to five questions, in this order:
 If the evidence supports saying what this costs, saves or unlocks, say it. If it does not, say
 nothing rather than guess. An unsupported number destroys the whole film.
 
+A SCENE SHOWING THE PRODUCT'S OWN INTERFACE IS ADDED FOR YOU, after your opening statement and
+before the journey, whenever the project has one that could be read off its source. It is not in
+the catalogue and you must not write it. Do not spend a scene describing what the product looks
+like either: the room is about to see it.
+
 THE CENTREPIECE is a REAL user journey taken from keyFlows, told as a person moving through it.
 Numbers support that story. Numbers are never the story.
 
@@ -327,8 +332,8 @@ technical cut. Give none at all in the stakeholder cut.
           is work in progress; say so.
         - A quiet period honestly reported is worth more than a loud one invented. But report it
           at the SAME length as any other film: use the full scene count and runtime you were
-          given, and spend the extra room on the detail of the work — the files, the flows they
-          sit in, what each change makes possible — rather than on padding or on restating the
+          given, and spend the extra room on the detail of the work: the files, the flows they
+          sit in, what each change makes possible, rather than on padding or on restating the
           product. A film that comes in under the scene count is rejected and thrown away, and
           the viewer gets a generic one instead, so under-filling loses the recap entirely.
     """.trimIndent()

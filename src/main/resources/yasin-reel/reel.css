@@ -1143,3 +1143,125 @@ body {
 
 /* Embedded in the Map page, which already carries the project name and the views. */
 :root[data-embedded] .reel__head { display: none; }
+
+/* ---------------------------------------------------------- product ui */
+
+/*
+ * The one block in this stylesheet that reads none of the film's own tokens.
+ *
+ * Every colour below comes from `--ui-*`, which the builder writes onto the scene
+ * element from values the harvester measured off the target project's stylesheets. The
+ * fallbacks exist only so a half-written slot cannot produce an invisible frame; in a
+ * real run none of them is used, because the scene is not drawn at all unless the
+ * design system was read completely.
+ *
+ * The scope matters as much as the values. These properties are set on `.scene--product-ui`
+ * and nowhere else, so the product's dark grey cannot leak into the scene after it.
+ */
+.scene--product-ui {
+  --ui-page: #FFFFFF; --ui-surface: #F7F7F8; --ui-line: #E5E5E7;
+  --ui-ink: #101014; --ui-dim: #71717A;
+  --ui-accent: var(--reel-accent); --ui-accent-ink: #FFFFFF; --ui-accent-wash: #F0F0F2;
+  --ui-radius: 8px;
+}
+.scene__body--ui { align-items: stretch; }
+
+.ui__frame {
+  flex: 1 1 auto; min-height: 0; width: 100%;
+  display: flex; flex-direction: column; overflow: hidden;
+  background: var(--ui-page);
+  border: 1px solid var(--ui-line);
+  border-radius: calc(var(--ui-radius) + 4px);
+  box-shadow: var(--reel-shadow);
+}
+/* Three dots in a bar is the shortest way to say "this is a screen". */
+.ui__bar {
+  flex: 0 0 auto; display: flex; align-items: center; gap: 8px;
+  height: 34px; padding: 0 16px;
+  background: var(--ui-surface);
+  border-bottom: 1px solid var(--ui-line);
+}
+.ui__dot { width: 9px; height: 9px; border-radius: 50%; background: var(--ui-line); }
+
+.ui__main { flex: 1 1 auto; min-height: 0; display: flex; }
+
+.ui__rail {
+  flex: 0 0 268px; min-width: 0; overflow: hidden;
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 18px 12px;
+  background: var(--ui-surface);
+  border-right: 1px solid var(--ui-line);
+}
+
+.ui__lockup { display: flex; align-items: center; gap: 11px; padding: 0 10px 14px; min-width: 0; }
+.ui__mark {
+  flex: 0 0 auto; display: grid; place-items: center;
+  width: 32px; height: 32px; border-radius: var(--ui-radius);
+  background: var(--ui-accent); color: var(--ui-accent-ink);
+  font-size: 17px; font-weight: 700; line-height: 1;
+}
+.ui__names { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ui__brand {
+  font-size: 17px; font-weight: 700; line-height: 1.15; color: var(--ui-ink);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.ui__sub {
+  font-size: 12px; line-height: 1.2; color: var(--ui-dim);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+.ui__rows { display: flex; flex-direction: column; gap: 3px; min-height: 0; }
+.ui__row {
+  display: flex; align-items: center; gap: 11px;
+  min-height: 0; padding: 9px 12px;
+  border-radius: var(--ui-radius);
+  color: var(--ui-dim);
+}
+.ui__row[data-on="true"] { background: var(--ui-accent-wash); color: var(--ui-ink); font-weight: 600; }
+.ui__bullet { flex: 0 0 auto; width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: .65; }
+.ui__row[data-on="true"] .ui__bullet { background: var(--ui-accent); opacity: 1; }
+.ui__label {
+  flex: 1 1 auto; min-width: 0; font-size: 16px; line-height: 1.2;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+/* A real badge the project declared, such as "beta". Never one we added. */
+.ui__badge {
+  flex: 0 0 auto; padding: 2px 8px; border-radius: 999px;
+  background: var(--ui-accent-wash); color: var(--ui-accent);
+  font-size: 11px; font-weight: 700; letter-spacing: .04em; line-height: 1.4;
+}
+.ui__more { padding: 8px 12px 0 29px; font-size: 13px; line-height: 1.2; color: var(--ui-dim); opacity: .8; }
+.ui__rows[data-count="7"] .ui__row, .ui__rows[data-count="8"] .ui__row { padding: 7px 12px; }
+.ui__rows[data-count="8"] .ui__label { font-size: 15px; }
+
+.ui__pane { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 22px; padding: 22px 26px; }
+
+.ui__stages { display: flex; align-items: stretch; gap: 10px; }
+.ui__stage {
+  position: relative; overflow: hidden;
+  flex: 1 1 0; min-width: 0; display: grid; place-items: center;
+  padding: 11px 8px; border-radius: var(--ui-radius);
+  background: var(--ui-surface); border: 1px solid var(--ui-line);
+}
+/* The wash is its own element rather than a background transition, because the MP4
+   renderer seeks to a frame instead of playing forward and never sees one start. */
+.ui__stagefill { position: absolute; inset: 0; background: var(--ui-accent); transform: scaleX(0); }
+.ui__stagelabel {
+  position: relative; max-width: 100%;
+  font-size: 14px; font-weight: 600; line-height: 1.2; color: var(--ui-dim);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.ui__stages[data-count="5"] .ui__stagelabel { font-size: 13px; }
+
+.ui__cards { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.ui__card {
+  display: flex; flex-direction: column; gap: 12px;
+  padding: 20px; min-height: 0; overflow: hidden;
+  background: var(--ui-surface);
+  border: 1px solid var(--ui-line);
+  border-radius: var(--ui-radius);
+}
+/* Deliberately blank. Inventing rows of plausible data is inventing a product. */
+.ui__bone { flex: 0 0 auto; height: 7px; border-radius: 999px; background: var(--ui-line); width: 72%; }
+.ui__bone--head { height: 10px; width: 44%; }
+.ui__bone--short { width: 56%; }

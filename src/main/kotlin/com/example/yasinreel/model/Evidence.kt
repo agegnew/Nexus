@@ -23,6 +23,21 @@ data class Evidence(
     val palette: Palette,
     val notableFiles: List<NotableFile>,
     /**
+     * The product's own interface, when it has one that can be read honestly.
+     *
+     * Null for every project that is not a front end, which is most of them, and null
+     * whenever either half (the words or the colours) could not be read, because half a
+     * recreation is a mock-up of a product that does not exist.
+     *
+     * Nullable rather than an empty default, because this file is also read back from a
+     * cached `evidence.json`, and Gson fills a missing member by leaving the field alone
+     * rather than by running the constructor. A default here would be a promise the
+     * deserialiser does not keep: every harvest cached before this field existed comes
+     * back with a null in a slot the type says cannot hold one, and the first call on it
+     * throws inside a film that was otherwise fine.
+     */
+    val ui: ProductUi? = null,
+    /**
      * Set only for a recap reel. Null means the evidence is the whole project, which is what
      * every existing caller and every cached evidence.json expects, so the default keeps them
      * reading correctly.
@@ -48,7 +63,7 @@ data class RecapFacts(
     val linesDeleted: Int,
     val uncommittedFiles: Int,
     val authors: List<String>,
-    /** Commit subjects, newest first — the plainest statement of intent the history has. */
+    /** Commit subjects, newest first: the plainest statement of intent the history has. */
     val subjects: List<String>
 )
 

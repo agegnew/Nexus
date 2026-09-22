@@ -316,7 +316,7 @@ object StoryboardValidator {
         // The leak the user hit was here, not in the narration: a route inside a journey
         // step, a package name inside a capability card body.
         strings(scene.slots).forEach { (path, value) ->
-            if (isExemptSlot(path, value)) return@forEach
+            if (isExemptSlot(scene.template, path, value)) return@forEach
             bannedMatches(value, vocabulary, productName).forEach { hit ->
                 violations += Violation(
                     index, BANNED_VOCABULARY,
@@ -736,7 +736,23 @@ object StoryboardValidator {
      * A link and a date stamp are furniture, not prose, and a live address is the single
      * most persuasive thing a stakeholder cut can show.
      */
-    private fun isExemptSlot(path: String, value: String): Boolean {
+    private fun isExemptSlot(template: String, path: String, value: String): Boolean {
+        /*
+         * The recreated interface is exempt entirely, and it is the only template that is.
+         *
+         * This list was written for narration, where a word like "component" means the
+         * speaker forgot who is listening. Inside this scene every string is the product's
+         * own label, already on screen in front of its own users, and a list tuned for
+         * prose gets it backwards in both directions: it deletes "Library" and "Requests"
+         * as jargon, and it passes "Dead-letter" and "Breaker" without comment. Deleting a
+         * real row also silently shortens a sidebar that the viewer can see is longer.
+         *
+         * What keeps this scene safe instead is where its strings came from, which is
+         * checked at the harvest: an internal console, a test fixture, a marketing site
+         * and our own previous output are all refused by path before a word is read.
+         */
+        if (template == SceneTemplate.PRODUCT_UI) return true
+
         val key = path.substringAfterLast('.')
         return when {
             // The product is allowed to be called by its name, whatever its name contains.

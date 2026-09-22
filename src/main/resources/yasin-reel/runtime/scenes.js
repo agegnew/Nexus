@@ -1216,6 +1216,154 @@ window.ReelScenes = (function () {
     };
   }
 
+  // ----------------------------------------------------------- product ui
+
+  /*
+   * The product's own interface, redrawn from what its source declares.
+   *
+   * Every other scene is a sentence about the product. This one is the product, and the
+   * difference has to be visible in one frame or the scene is pointless: the moment the
+   * viewer recognises their own sidebar is the moment the film stops being a template
+   * that was handed some text.
+   *
+   * So nothing on this frame wears the film's palette. The tokens the harvester measured
+   * off their stylesheets are written onto the scene element as custom properties, every
+   * rule below reads them, and the scope stops them reaching the scene either side.
+   *
+   * There are no icons in it. We know which words are in their navigation; we do not know
+   * which glyph sits next to each one, and a guessed icon beside a real word makes the
+   * real word look guessed too. A dot is honest at a glance and correct at any size.
+   */
+  function buildProductUi(slots, theme, ctx) {
+    var el = scene('product-ui');
+    var rows = list(slots.nav, 8);
+    var tokens = slots.tokens || {};
+    if (!rows.length) return null;
+
+    // Theirs, scoped to this scene. Nothing outside it can read these.
+    var vars = {
+      page: tokens.page, surface: tokens.surface, line: tokens.line, ink: tokens.ink,
+      dim: tokens.dim, accent: tokens.accent, accentInk: tokens.accentInk, accentWash: tokens.accentWash
+    };
+    for (var key in vars) {
+      if (vars[key]) el.style.setProperty('--ui-' + key.replace(/([A-Z])/g, '-$1').toLowerCase(), '#' + String(vars[key]).replace('#', ''));
+    }
+    var radius = Math.max(0, Math.min(28, Number(tokens.radius) || 8));
+    el.style.setProperty('--ui-radius', radius + 'px');
+
+    var head = header(el, text(slots.eyebrow, 'The product'));
+    var body = bodyOf(el, 'ui');
+    var frame = add(body, 'div', 'ui__frame');
+
+    var bar = add(frame, 'div', 'ui__bar');
+    for (var d = 0; d < 3; d++) add(bar, 'span', 'ui__dot');
+
+    var main = add(frame, 'div', 'ui__main');
+    var rail = add(main, 'div', 'ui__rail');
+
+    var brand = clean(text(slots.brand, text(theme && theme.projectName, 'This product')));
+    var lockup = add(rail, 'div', 'ui__lockup');
+    var mark = add(lockup, 'span', 'ui__mark', brand.slice(0, 1).toUpperCase());
+    var names = add(lockup, 'span', 'ui__names');
+    add(names, 'span', 'ui__brand', brand);
+    var sub = text(slots.brandSub);
+    if (sub) add(names, 'span', 'ui__sub', sub);
+
+    var stack = add(rail, 'div', 'ui__rows');
+    stack.setAttribute('data-count', String(rows.length));
+    var rowEls = [];
+    for (var i = 0; i < rows.length; i++) {
+      var label = clean(text(rows[i].label));
+      if (!label) continue;
+      var row = add(stack, 'div', 'ui__row');
+      // Only ever set when the project itself said which row it opens on. Choosing one
+      // here would be inventing the single most visible thing on the frame.
+      if (rows[i].active) row.setAttribute('data-on', 'true');
+      add(row, 'span', 'ui__bullet');
+      add(row, 'span', 'ui__label', label);
+      if (rows[i].badge) add(row, 'span', 'ui__badge', clean(String(rows[i].badge)));
+      rowEls.push(row);
+    }
+    // What did not fit, named rather than left as a silent shortening: a viewer who uses
+    // this product every day counts the rows, and two missing ones read as a decision.
+    var more = Number(slots.more) || 0;
+    if (more > 0) add(stack, 'span', 'ui__more', '+' + more + ' more');
+
+    var pane = add(main, 'div', 'ui__pane');
+    var stages = list(slots.stages, 5);
+    var chips = [];
+    var fills = [];
+    var chipLabels = [];
+    if (stages.length) {
+      var track = add(pane, 'div', 'ui__stages');
+      track.setAttribute('data-count', String(stages.length));
+      for (var j = 0; j < stages.length; j++) {
+        var stage = clean(text(typeof stages[j] === 'string' ? stages[j] : stages[j].label));
+        if (!stage) continue;
+        var chip = add(track, 'span', 'ui__stage');
+        fills.push(add(chip, 'span', 'ui__stagefill'));
+        chipLabels.push(add(chip, 'span', 'ui__stagelabel', stage));
+        chips.push(chip);
+      }
+    }
+
+    // Two empty cards. Not content: the shape of a working screen, so the frame reads as
+    // an application rather than as a sidebar floating in a white rectangle.
+    var cards = add(pane, 'div', 'ui__cards');
+    var cardEls = [];
+    for (var c = 0; c < 2; c++) {
+      var card = add(cards, 'div', 'ui__card');
+      add(card, 'span', 'ui__bone ui__bone--head');
+      add(card, 'span', 'ui__bone');
+      add(card, 'span', 'ui__bone ui__bone--short');
+      cardEls.push(card);
+    }
+
+    var accent = vars.accent ? '#' + String(vars.accent).replace('#', '') : null;
+    var accentInk = vars.accentInk ? '#' + String(vars.accentInk).replace('#', '') : null;
+
+    return {
+      el: el,
+      animate: function (tl, start, dur) {
+        settle([{ host: rail, nodes: rowEls, floor: 12 }]);
+        head.animate(tl, start, dur);
+        drift(tl, frame, start, dur, 1.022, { y: -4 });
+
+        var open = start + BODY_AT;
+        rise(tl, frame, start + HEAD_AT, { y: 26, duration: 0.5 });
+        rise(tl, lockup, open, { y: 10, x: -10, duration: 0.38 });
+        // The rows arrive in the order the product declares them, which is the order its
+        // own users read them in.
+        rise(tl, rowEls, open + 0.1, { y: 8, x: -14, duration: 0.3, stagger: 0.05 });
+
+        var after = open + 0.1 + rowEls.length * 0.05 + 0.2;
+        if (cardEls.length) rise(tl, cardEls, after, { y: 14, duration: 0.42, stagger: 0.08 });
+
+        /*
+         * The pipeline lights left to right, which is the one motion on this frame that
+         * says something rather than decorating it: it is the order the product does its
+         * work in. Driven by real tweens on real properties rather than by a CSS state
+         * selector, because the renderer seeks to a frame rather than playing forward and
+         * a transition it never saw start is a transition that never happens.
+         */
+        var lit = Math.min(Math.max(dur - (after - start) - 0.3, 0.6), 1.8);
+        for (var k = 0; k < chips.length; k++) {
+          var at = after + lit * (k / Math.max(chips.length, 1));
+          gsap.set(fills[k], { transformOrigin: '0% 50%' });
+          tl.fromTo(fills[k], { scaleX: 0 }, {
+            scaleX: 1, duration: 0.42, ease: 'power2.out', immediateRender: false
+          }, at);
+          if (accentInk) {
+            tl.to(chipLabels[k], { color: accentInk, duration: 0.3, ease: 'none', immediateRender: false }, at + 0.1);
+          }
+          if (accent) {
+            tl.to(chips[k], { borderColor: accent, duration: 0.3, ease: 'none', immediateRender: false }, at + 0.05);
+          }
+        }
+      }
+    };
+  }
+
   // ---------------------------------------------------------------- outro
 
   function buildOutro(slots, theme, ctx) {
@@ -1274,6 +1422,7 @@ window.ReelScenes = (function () {
     'arch-layers': buildArchLayers,
     'flow-trace': buildFlowTrace,
     'journey': buildJourney,
+    'product-ui': buildProductUi,
     'outro': buildOutro,
     reducedMotion: REDUCED,
     sourceChip: sourceChip,

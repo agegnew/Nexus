@@ -74,6 +74,41 @@ object FallbackDirector {
         )
     }
 
+    /**
+     * Puts the recreated interface into a cut that a model directed.
+     *
+     * The director, offline or not, writes scenes out of the product model. This one scene
+     * is not written at all: its content was measured off the project's own source, so
+     * there is nothing for a model to decide and a model asked to decide it would invent
+     * a navigation for a product whose navigation is right there on disk.
+     *
+     * So it is inserted afterwards, on both paths, and it goes in front of the journey,
+     * because the journey is a walk through a product the room has now seen.
+     */
+    fun withProductUi(storyboard: Storyboard, evidence: Evidence): Storyboard {
+        if (storyboard.audience != Audience.STAKEHOLDER) return storyboard
+        /*
+         * Any scene of this template that arrived with the answer is discarded, not kept.
+         *
+         * The template is deliberately absent from the catalogue the director is sent, so
+         * a model that produces one produced it from nothing, which is the one thing this
+         * scene exists to make impossible. Dropping it is also what stops an invented one
+         * from occupying the slot and suppressing the real one.
+         */
+        val scenes = storyboard.scenes.filterNot { it.template == SceneTemplate.PRODUCT_UI }.toMutableList()
+        val addition = productUiScene(evidence)
+            ?: return if (scenes.size == storyboard.scenes.size) storyboard else storyboard.copy(scenes = scenes)
+
+        val at = scenes.indexOfFirst { it.template == SceneTemplate.JOURNEY }
+            .takeIf { it > 0 }
+            ?: scenes.indexOfFirst { it.template == SceneTemplate.CAPABILITY_CARDS }.takeIf { it > 0 }
+            ?: minOf(3, scenes.size)
+        // The film keeps the length it was directed to, so one more scene means every scene
+        // is a little shorter rather than the cut running over what the narration was paced for.
+        scenes.add(at, addition.copy(durationMs = storyboard.totalMs / (scenes.size + 1)))
+        return storyboard.copy(scenes = scenes)
+    }
+
     // ---- the stakeholder cut ---------------------------------------------------------
 
     /**
@@ -107,6 +142,9 @@ object FallbackDirector {
             recapScene(evidence, stakeholder = true),
             recapWorkScene(evidence),
             promise,
+            // Straight after the promise and before the journey: the promise is a claim,
+            // this is the thing itself, and the journey afterwards is a walk through it.
+            productUiScene(evidence),
             journey,
             plainCapabilityScene(evidence, prose),
             featureScene(prose),
@@ -168,6 +206,37 @@ object FallbackDirector {
             SceneTemplate.JOURNEY,
             slots,
             "So follow one person through it, from the first move to the finished result."
+        )
+    }
+
+    /**
+     * Their interface, not a picture of it and not a description of it.
+     *
+     * Every other scene in this cut is a sentence somebody wrote about the product. This
+     * one is drawn from what the source declares, so the rows in it are the rows in their
+     * sidebar, in their order, in their colours, wearing the badges they gave them.
+     *
+     * It is the only scene a director cannot help with, which is why it is built here for
+     * both the offline and the model path: asking a language model to fill these slots
+     * would be asking it to write someone else's navigation, and the whole value of the
+     * frame is that nobody wrote it.
+     *
+     * Null whenever either half is missing, and that is the common case. A project with
+     * no front end has no interface to show, and showing their words in our colours would
+     * be a mock-up of a product that does not exist, presented as a photograph of one.
+     */
+    private fun productUiScene(evidence: Evidence): Scene? {
+        val ui = evidence.ui ?: return null
+        if (!ui.usable) return null
+        val slots = ui.slots(evidence.projectName, null) ?: return null
+        slots.addProperty("eyebrow", "The product")
+        slots.addProperty("heading", "What it looks like")
+        return scene(
+            SceneTemplate.PRODUCT_UI,
+            slots,
+            // Nineteen words is the budget at eight seconds, and this has to stay well
+            // inside it because the scene is carried by what is on screen, not by this.
+            "And this is the thing itself, in the colours and the words it already wears."
         )
     }
 
@@ -346,7 +415,7 @@ object FallbackDirector {
      * scenes out of every cut that is not a recap.
      *
      * This director is not a curiosity: it is what ships whenever the model is unreachable, out
-     * of credits, or its cut fails the scene minimum — which is exactly what happened the first
+     * of credits, or its cut fails the scene minimum, which is exactly what happened the first
      * time a recap was generated. A recap that silently becomes a product tour is worse than a
      * plain one, so the offline path has to tell the same story.
      */

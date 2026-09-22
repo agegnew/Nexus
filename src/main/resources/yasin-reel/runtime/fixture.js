@@ -343,6 +343,37 @@ window.ReelFixture = (function () {
         sourceRefs: []
       },
       {
+        // The worst case for the recreated interface: the longest row a cap allows, the
+        // most rows it allows, two badges, five stage labels at the character limit, and
+        // a product that ships dark, so the frame is drawn in colours nothing else in the
+        // film uses. If this reads, a real project reads.
+        template: 'product-ui',
+        durationMs: 6000,
+        slots: {
+          eyebrow: 'The product',
+          brand: 'A product with a long name',
+          brandSub: 'And a line under it that is itself long',
+          nav: [
+            { label: 'Dashboard' },
+            { label: 'A row at the cap exactly' },
+            { label: 'Assets' },
+            { label: 'Ideation' },
+            { label: 'Producer', badge: 'beta' },
+            { label: 'SMAA intelligence', badge: 'preview' },
+            { label: 'Library' },
+            { label: 'Settings' }
+          ],
+          more: 3,
+          stages: ['Ideation', 'Editing', 'Finalization', 'Scheduling', 'Approval'],
+          tokens: {
+            page: '0B0F14', surface: '141A21', line: '1E2630', ink: 'E6EDF3', dim: '8B98A5',
+            accent: 'F0790B', accentInk: '000000', accentWash: '2A1F14', radius: 14, scheme: 'dark'
+          }
+        },
+        narration: 'And this is the thing itself, in the colours and the words it already wears.',
+        sourceRefs: []
+      },
+      {
         template: 'journey',
         durationMs: 6000,
         slots: {

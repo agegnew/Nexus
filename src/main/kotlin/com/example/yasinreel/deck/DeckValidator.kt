@@ -96,6 +96,19 @@ object DeckValidator {
      * idea. A slide only goes when the thing that failed was the thing it is about.
      */
     private fun scrub(slide: Slide, evidence: Evidence, issues: MutableList<String>): Slide? {
+        /*
+         * One layout is exempt, and it is the one whose content nobody wrote.
+         *
+         * Everything on the recreated interface is the product's own label, already in
+         * front of its own users. This rule was written for prose, and on labels it gets
+         * the answer backwards both ways: it deletes real rows like "Library" as jargon,
+         * which quietly shortens a sidebar the viewer can see is longer, and it passes
+         * genuinely internal ones like "Dead-letter" without comment. What keeps that
+         * slide safe is the harvest, which refuses an internal console, a test fixture,
+         * a marketing site or our own earlier output by path before reading a word.
+         */
+        if (slide.layout == SlideLayout.PRODUCT_UI) return slide
+
         val slots = slide.slots.deepCopy()
         val product = evidence.projectName
         var fatal = false

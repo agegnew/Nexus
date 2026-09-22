@@ -41,18 +41,34 @@ object SceneTemplate {
     const val ARCH_LAYERS = "arch-layers"
     const val FLOW_TRACE = "flow-trace"
     const val JOURNEY = "journey"
+
+    /**
+     * The product's own interface, redrawn from what its source declares.
+     *
+     * The only scene whose content is not a sentence about the product but the product,
+     * and therefore the only one that cannot be filled by a director: its slots come
+     * straight from the harvest. A director that tried to write them would be writing
+     * someone else's navigation for them.
+     */
+    const val PRODUCT_UI = "product-ui"
     const val OUTRO = "outro"
 
     val ALL = listOf(
         TITLE, BIG_STATEMENT, STAT_GRID, CAPABILITY_CARDS,
-        ARCH_LAYERS, FLOW_TRACE, JOURNEY, OUTRO
+        ARCH_LAYERS, FLOW_TRACE, JOURNEY, PRODUCT_UI, OUTRO
     )
 
     /** Scenes that assume the viewer reads code, so never used in a stakeholder cut. */
     val TECHNICAL_ONLY = setOf(ARCH_LAYERS, FLOW_TRACE)
 
-    /** Scenes that assume the viewer does not, so never used in a technical cut. */
-    val STAKEHOLDER_ONLY = setOf(JOURNEY)
+    /**
+     * Scenes that assume the viewer does not read code, so never used in a technical cut.
+     *
+     * [PRODUCT_UI] is here because a developer already has the app open on the other
+     * monitor. Showing an engineer a picture of a sidebar they wrote is a slow way to
+     * say nothing; showing it to the person who paid for the sidebar is the point.
+     */
+    val STAKEHOLDER_ONLY = setOf(JOURNEY, PRODUCT_UI)
 }
 
 object Audience {

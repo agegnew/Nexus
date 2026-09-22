@@ -43,6 +43,7 @@ object DeckGeometry {
                 SlideLayout.STATS -> stats(shapes, slots, accent, taken)
                 SlideLayout.STACK -> stack(shapes, slots, accent, taken)
                 SlideLayout.JOURNEY -> journey(shapes, slots, accent, taken)
+                SlideLayout.PRODUCT_UI -> productUi(shapes, slots, accent)
                 SlideLayout.GAPS -> gaps(shapes, slots, accent, taken)
                 SlideLayout.CLOSING -> closing(shapes, deck, slots, taken)
                 // An unknown layout must never produce a blank slide, so it degrades to
@@ -505,6 +506,191 @@ object DeckGeometry {
         }
         return title
     }
+
+    /**
+     * The product's own interface, redrawn at slide scale in the product's own colours.
+     *
+     * This is the one layout that does not use [DeckTheme]'s palette at all. Every fill,
+     * every rule and every piece of type on the frame below the header comes out of
+     * `slots.tokens`, which the harvester measured off the project's stylesheets. Our blue
+     * appearing anywhere inside the frame would make it a picture of our template holding
+     * their words, which is the opposite of the claim the slide is there to make.
+     *
+     * Nothing here is an icon, a screenshot or an image. It is boxes and text, which is
+     * all a .pptx holds natively, so the slide stays a slide: a person can open it in
+     * PowerPoint and move the sidebar, and every label in it is still selectable text.
+     */
+    private fun productUi(out: MutableList<Shape>, slots: JsonObject, accent: Int): String {
+        val title = header(out, slots.str("eyebrow") ?: "The product", slots.str("heading") ?: "What it looks like", accent)
+        val ui = slots.get("tokens") as? JsonObject ?: return title
+        fun token(key: String, fallback: String) = ui.str(key) ?: fallback
+
+        val page = token("page", DeckTheme.PAPER)
+        val surface = token("surface", DeckTheme.WASH)
+        val line = token("line", DeckTheme.LINE)
+        val ink = token("ink", DeckTheme.INK)
+        val dim = token("dim", DeckTheme.MUTE)
+        val brandColour = token("accent", DeckTheme.accent(accent))
+        val brandInk = token("accentInk", DeckTheme.PAPER)
+        val wash = token("accentWash", DeckTheme.WASH)
+        val radius = (ui.get("radius")?.takeIf { it.isJsonPrimitive }?.asInt ?: 8).coerceIn(0, 28)
+
+        val rows = slots.list("nav").take(MAX_UI_ROWS)
+        if (rows.isEmpty()) return title
+
+        // The frame: a browser-shaped rectangle filling the body band, with the product's
+        // page colour inside it and its own hairline around it rather than ours.
+        val frameX = MARGIN
+        val frameY = BODY_Y
+        val frameW = CONTENT_W
+        val frameH = BODY_H
+        val corner = pctOf(radius, min(frameW, frameH))
+        out += Box(frameX, frameY, frameW, frameH, page, roundPct = corner, stroke = line)
+
+        // The title bar, and its three dots, because a rectangle with three dots in the
+        // corner reads as a screen and a plain rectangle reads as a box.
+        val barH = 38
+        out += Box(frameX, frameY, frameW, barH, surface)
+        out += Box(frameX, frameY + barH - 1, frameW, 1, line)
+        repeat(3) { i -> out += Box(frameX + 18 + i * 16, frameY + barH / 2 - 4, 8, 8, line, roundPct = 50) }
+
+        val railW = 268
+        val railY = frameY + barH
+        val railH = frameH - barH
+        out += Box(frameX, railY, railW, railH, surface)
+        out += Box(frameX + railW - 1, railY, 1, railH, line)
+
+        // The lockup.
+        val padX = 22
+        val brand = DeckTheme.clip(slots.str("brand").orEmpty(), Caps.UI_BRAND)
+        val markSize = 30
+        out += Box(frameX + padX, railY + 22, markSize, markSize, brandColour, roundPct = pctOf(radius, markSize))
+        out += Label(
+            frameX + padX, railY + 22, markSize, markSize, listOf(brand.take(1).uppercase()),
+            17, brandInk, bold = true, align = Align.CENTER, anchor = Anchor.MIDDLE
+        )
+        if (brand.isNotEmpty()) {
+            val nameX = frameX + padX + markSize + 12
+            val nameW = railW - (nameX - frameX) - padX
+            val size = DeckTheme.fit(brand, nameW, 20, listOf(17, 15, 13, 12), bold = true, linePct = 110)
+            out += Label(nameX, railY + 23, nameW, 20, listOf(brand), size, ink, bold = true, linePct = 110)
+            val sub = slots.str("brandSub")?.let { DeckTheme.clip(it, Caps.UI_BRAND_SUB) }
+            if (sub != null) {
+                out += Label(nameX, railY + 43, nameW, 16, listOf(sub), 11, dim, linePct = 110)
+            }
+        }
+
+        // The rows. Their words, their spacing, and the selected one wearing their accent
+        // only when the project said which one it is.
+        /*
+         * Sized so every row fits, rather than sized to a constant and then truncated.
+         *
+         * A recreated sidebar that is one row shorter than the real one is a worse
+         * failure than it looks: the viewer knows their own app has eight, and the
+         * missing one reads as the tool having quietly decided something. The flagship
+         * project this was checked against has exactly eight.
+         */
+        val rowsTop = railY + 84
+        val rowGap = 4
+        // Reserved before the rows are sized, not checked after they are placed. Sized
+        // first, the rows fill the rail exactly and the line saying what was left off is
+        // itself left off, which is the failure it exists to prevent, one level down.
+        val more = slots.get("more")?.takeIf { it.isJsonPrimitive }?.asInt ?: 0
+        val space = railY + railH - 12 - rowsTop - (if (more > 0) MORE_ROW_H else 0)
+        val rowH = min(38, (space - rowGap * (rows.size - 1)) / rows.size)
+        var y = rowsTop
+        rows.forEach { row ->
+            val label = DeckTheme.clip(row.str("label").orEmpty(), Caps.UI_ROW)
+            if (label.isEmpty()) return@forEach
+            val on = row.get("active")?.takeIf { it.isJsonPrimitive }?.asBoolean == true
+            val rowX = frameX + 12
+            val rowW = railW - 24
+            if (on) out += Box(rowX, y, rowW, rowH, wash, roundPct = pctOf(radius, rowH))
+
+            // A dot rather than an icon: we do not know which glyph they use, and drawing
+            // a guessed icon next to a real word makes the real word look guessed too.
+            out += Box(rowX + 14, y + rowH / 2 - 3, 6, 6, if (on) brandColour else dim, roundPct = 50)
+
+            val badge = row.str("badge")?.let { DeckTheme.clip(it, Caps.UI_BADGE) }
+            val badgeW = badge?.let { (DeckTheme.widthOf(it, 10, bold = true) + 16).toInt() } ?: 0
+            val textX = rowX + 32
+            val textW = rowW - (textX - rowX) - 12 - (if (badge != null) badgeW + 8 else 0)
+            val size = DeckTheme.fit(label, textW, rowH - 8, listOf(15, 14, 13, 12), linePct = 112)
+            out += Label(
+                textX, y, textW, rowH, listOf(label), size, if (on) ink else dim,
+                bold = on, anchor = Anchor.MIDDLE, linePct = 112
+            )
+            if (badge != null) {
+                val bx = rowX + rowW - 12 - badgeW
+                out += Box(bx, y + rowH / 2 - 9, badgeW, 18, wash, roundPct = 50)
+                out += Label(bx, y + rowH / 2 - 9, badgeW, 18, listOf(badge), 10, brandColour, bold = true, align = Align.CENTER, anchor = Anchor.MIDDLE)
+            }
+            y += rowH + rowGap
+        }
+
+        // What did not fit, named rather than left as a silent shortening.
+        if (more > 0) {
+            out += Label(frameX + 44, y, railW - 56, MORE_ROW_H, listOf("+$more more"), 13, dim, anchor = Anchor.MIDDLE)
+        }
+
+        // The pane: whatever the product calls the steps of its own pipeline, in order.
+        val paneX = frameX + railW
+        val paneW = frameW - railW
+        val stages = slots.strings("stages").take(MAX_UI_STAGES)
+
+        val chipY = railY + 46
+        val chipH = 40
+        val chipGap = 12
+        val innerX = paneX + 32
+        val innerW = paneW - 64
+        val chipW = if (stages.isEmpty()) 0 else (innerW - chipGap * (stages.size - 1)) / stages.size
+        stages.forEachIndexed { i, stage ->
+            val x = innerX + i * (chipW + chipGap)
+            val text = DeckTheme.clip(stage, Caps.UI_STAGE)
+            // The first stage is where the product opens, which is a fact about it rather
+            // than a choice of ours, so it is the one that wears the accent.
+            val lead = i == 0
+            out += Box(x, chipY, chipW, chipH, if (lead) brandColour else surface, roundPct = pctOf(radius, chipH),
+                stroke = if (lead) null else line)
+            val size = DeckTheme.fit(text, chipW - 16, chipH - 10, listOf(14, 13, 12, 11), bold = true, linePct = 112)
+            out += Label(x, chipY, chipW, chipH, listOf(text), size, if (lead) brandInk else dim,
+                bold = true, align = Align.CENTER, anchor = Anchor.MIDDLE, linePct = 112)
+            if (i < stages.size - 1) {
+                out += Box(x + chipW + 2, chipY + chipH / 2, chipGap - 4, 1, line)
+            }
+        }
+
+        /*
+         * Two empty cards, whether or not the product declared a pipeline.
+         *
+         * They were once drawn only under the chips, which meant a project with no
+         * pipeline got a correct sidebar beside a large empty rectangle, and an empty
+         * rectangle reads as a rendering failure rather than as an honest blank. They are
+         * deliberately blank inside: filling them with plausible rows would be inventing a
+         * product, which is the one thing this slide exists not to do.
+         */
+        val cardY = if (stages.isEmpty()) chipY else chipY + chipH + 26
+        val cardH = frameY + frameH - cardY - 28
+        if (cardH > 40) {
+            val cardW = (innerW - 20) / 2
+            repeat(2) { i ->
+                val x = innerX + i * (cardW + 20)
+                out += Box(x, cardY, cardW, cardH, surface, roundPct = pctOf(radius, min(cardW, cardH)), stroke = line)
+                out += Box(x + 20, cardY + 22, (cardW * 0.44).toInt(), 8, line, roundPct = 50)
+                out += Box(x + 20, cardY + 44, (cardW * 0.72).toInt(), 6, line, roundPct = 50)
+                out += Box(x + 20, cardY + 60, (cardW * 0.58).toInt(), 6, line, roundPct = 50)
+            }
+        }
+        return title
+    }
+
+    /** A pixel radius expressed the way OOXML wants it: a percentage of the short side. */
+    private fun pctOf(radiusPx: Int, shortSide: Int): Int =
+        if (shortSide <= 0) 0 else (radiusPx * 100 / shortSide).coerceIn(0, 50)
+
+    private const val MAX_UI_ROWS = 8
+    private const val MORE_ROW_H = 24
+    private const val MAX_UI_STAGES = 5
 
     private fun gaps(out: MutableList<Shape>, slots: JsonObject, accent: Int, taken: MutableSet<String>): String {
         val title = header(out, slots.str("eyebrow") ?: "Known gaps", slots.str("heading"), accent)
