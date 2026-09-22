@@ -104,6 +104,8 @@ object FallbackDirector {
 
         return listOfNotNull(
             title,
+            recapScene(evidence),
+            recapWorkScene(evidence),
             promise,
             journey,
             plainCapabilityScene(evidence, prose),
@@ -116,15 +118,24 @@ object FallbackDirector {
     }
 
     private fun productTitle(evidence: Evidence, prose: Prose): Scene {
+        val recap = evidence.recap
         val slots = JsonObject().apply {
             addProperty("productName", evidence.projectName)
-            addProperty("tagline", prose.sentence(4, 24) ?: "What it does, and who it is for.")
+            addProperty(
+                "tagline",
+                if (recap != null) "What we built between ${recap.since} and ${recap.until}"
+                else prose.sentence(4, 24) ?: "What it does, and who it is for."
+            )
         }
         // No sourceRefs, ever: the player pins them on screen as file path chips.
         return scene(
             SceneTemplate.TITLE,
             slots,
-            "This is ${evidence.projectName}, and here is what it lets a person actually do."
+            if (recap != null) {
+                "This is what we built on ${evidence.projectName} between ${recap.since} and ${recap.until}."
+            } else {
+                "This is ${evidence.projectName}, and here is what it lets a person actually do."
+            }
         )
     }
 
@@ -318,6 +329,8 @@ object FallbackDirector {
      */
     private fun technicalCut(evidence: Evidence, prose: Prose): List<Scene> = listOfNotNull(
         technicalTitle(evidence, prose),
+        recapScene(evidence),
+        recapWorkScene(evidence),
         measurementScene(evidence),
         languageScene(evidence),
         archScene(evidence),
@@ -328,15 +341,90 @@ object FallbackDirector {
         technicalOutro(evidence)
     )
 
+    /**
+     * The counted shape of the period. Null for a launch film, which is what keeps these two
+     * scenes out of every cut that is not a recap.
+     *
+     * This director is not a curiosity: it is what ships whenever the model is unreachable, out
+     * of credits, or its cut fails the scene minimum — which is exactly what happened the first
+     * time a recap was generated. A recap that silently becomes a product tour is worse than a
+     * plain one, so the offline path has to tell the same story.
+     */
+    private fun recapScene(evidence: Evidence): Scene? {
+        val recap = evidence.recap ?: return null
+        val stats = JsonArray()
+        stats.add(stat("Commits", count(recap.commits)))
+        stats.add(stat("Files", count(recap.filesTouched)))
+        stats.add(stat("Added", "+${count(recap.linesAdded)}"))
+        if (recap.linesDeleted > 0) stats.add(stat("Removed", "-${count(recap.linesDeleted)}"))
+        if (recap.uncommittedFiles > 0) stats.add(stat("Not committed", count(recap.uncommittedFiles)))
+
+        val slots = JsonObject().apply {
+            addProperty("heading", "${recap.since} to ${recap.until}")
+            add("stats", stats)
+        }
+        // One sentence, with the work-in-progress clause inside it. The validator trims narration
+        // to the scene's time budget and cuts at the last full stop, so anything said in a second
+        // sentence is the first thing to disappear — and "some of this is not finished" is the
+        // last claim that should be allowed to quietly vanish.
+        val pending = if (recap.uncommittedFiles > 0) {
+            ", and ${recap.uncommittedFiles} of them are still uncommitted work in progress"
+        } else {
+            ""
+        }
+        return scene(
+            SceneTemplate.STAT_GRID,
+            slots,
+            "Between ${recap.since} and ${recap.until}: ${plural(recap.commits, "commit")} " +
+                "across ${plural(recap.filesTouched, "file")}$pending."
+        )
+    }
+
+    /**
+     * What the commits themselves say. These are the developer's own words for the work, which
+     * beats anything this director could infer from file names.
+     */
+    private fun recapWorkScene(evidence: Evidence): Scene? {
+        val recap = evidence.recap ?: return null
+        val subjects = recap.subjects.filter { it.isNotBlank() }.take(MAX_RECAP_CARDS)
+        if (subjects.isEmpty()) return null
+
+        val cards = JsonArray()
+        subjects.forEach { subject ->
+            cards.add(JsonObject().apply {
+                addProperty("title", subject.take(RECAP_CARD_TITLE).trim())
+                addProperty("detail", "")
+            })
+        }
+        val slots = JsonObject().apply {
+            addProperty("heading", "What was done")
+            add("cards", cards)
+        }
+        return scene(
+            SceneTemplate.CAPABILITY_CARDS,
+            slots,
+            "In the developer's own words, this is what the period went on."
+        )
+    }
+
     private fun technicalTitle(evidence: Evidence, prose: Prose): Scene {
+        val recap = evidence.recap
         val slots = JsonObject().apply {
             addProperty("productName", evidence.projectName)
-            addProperty("tagline", prose.sentence(4, 24) ?: technicalTagline(evidence))
+            addProperty(
+                "tagline",
+                if (recap != null) "What changed between ${recap.since} and ${recap.until}"
+                else prose.sentence(4, 24) ?: technicalTagline(evidence)
+            )
         }
         return scene(
             SceneTemplate.TITLE,
             slots,
-            "This is ${evidence.projectName}, described by its own source rather than by its README.",
+            if (recap != null) {
+                "This is the work done on ${evidence.projectName} between ${recap.since} and ${recap.until}."
+            } else {
+                "This is ${evidence.projectName}, described by its own source rather than by its README."
+            },
             firstEntryRef(evidence)
         )
     }
@@ -349,14 +437,19 @@ object FallbackDirector {
         top?.let { stats.add(stat(it.language, "${percent(it.lines, evidence.stats.totalLines)}%")) }
         stats.add(stat("Test files", count(evidence.stats.testFiles)))
 
+        val recap = evidence.recap
         val slots = JsonObject().apply {
-            addProperty("heading", "Measured, not estimated")
+            addProperty("heading", if (recap != null) "Touched in this period" else "Measured, not estimated")
             add("stats", stats)
         }
         return scene(
             SceneTemplate.STAT_GRID,
             slots,
-            "Start with the size of it, counted off disk rather than estimated."
+            if (recap != null) {
+                "These are the files the period touched, counted off disk rather than estimated."
+            } else {
+                "Start with the size of it, counted off disk rather than estimated."
+            }
         )
     }
 
@@ -604,6 +697,9 @@ object FallbackDirector {
         val kept = if (boundary >= limit / 2) cut.substring(0, boundary) else cut
         return kept.trimEnd(' ', ',', '.', ':', ';', '-')
     }
+
+    private fun plural(count: Int, singular: String): String =
+        "$count " + if (count == 1) singular else singular + "s"
 
     private fun count(value: Int): String = String.format(Locale.US, "%,d", value)
 
@@ -943,6 +1039,10 @@ object FallbackDirector {
     private const val MIN_SCENES = 6
 
     /** Overwritten by the pacing pass, and only ever visible if that pass is skipped. */
+    /** Enough commit subjects to fill a card scene without it becoming a changelog. */
+    private const val MAX_RECAP_CARDS = 6
+    private const val RECAP_CARD_TITLE = 70
+
     private const val PLACEHOLDER_MS = 6_000
 
     private val DEFAULT_COLORS = listOf("#6366f1", "#22d3ee", "#f59e0b", "#e11d48")

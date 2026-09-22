@@ -325,8 +325,12 @@ technical cut. Give none at all in the stakeholder cut.
           if it were this small. Place the work inside the wider system when you refer to it.
         - Do not say a feature is finished when its files are still uncommitted. Uncommitted work
           is work in progress; say so.
-        - If the range contains little, say so plainly and keep the film short. A quiet week
-          honestly reported is worth more than a loud one invented.
+        - A quiet period honestly reported is worth more than a loud one invented. But report it
+          at the SAME length as any other film: use the full scene count and runtime you were
+          given, and spend the extra room on the detail of the work — the files, the flows they
+          sit in, what each change makes possible — rather than on padding or on restating the
+          product. A film that comes in under the scene count is rejected and thrown away, and
+          the viewer gets a generic one instead, so under-filling loses the recap entirely.
     """.trimIndent()
 
 }
