@@ -17,6 +17,12 @@
 
     <extensions defaultExtensionNs="com.intellij">
 
+        <applicationConfigurable
+                parentId="tools"
+                id="com.example.activity.settings"
+                displayName="Code Visualizer"
+                instance="com.example.activity.ActivityConfigurable"/>
+
         <toolWindow
                 id="Code Visualizer"
                 anchor="right"

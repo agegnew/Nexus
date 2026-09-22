@@ -12,6 +12,7 @@ import '@xyflow/react/dist/style.css'
 import './App.css'
 
 const ArchitectureDiagram = lazy(() => import('./ArchitectureDiagram'))
+const ActivityView = lazy(() => import('./views/ActivityView'))
 
 const ROOT_ID = 'project-root'
 const HORIZONTAL_GAP = 300
@@ -255,14 +256,21 @@ export default function App() {
   const [expandedIds, setExpandedIds] = useState(() => new Set([ROOT_ID]))
   const [flowInstance, setFlowInstance] = useState(null)
   const [activeView, setActiveView] = useState('code')
+  const [activityMeta, setActivityMeta] = useState(() => window.__CODE_VISUALIZER_ACTIVITY_META__ ?? null)
 
   useEffect(() => {
     const receiveGraph = (event) => {
       setAnalysis(event.detail)
       setExpandedIds(new Set([ROOT_ID]))
     }
+    // The IDE pushes the activity scopes alongside each graph, so the dropdown needs no setup.
+    const receiveActivityMeta = (event) => setActivityMeta(event.detail)
     window.addEventListener('code-visualizer:graph', receiveGraph)
-    return () => window.removeEventListener('code-visualizer:graph', receiveGraph)
+    window.addEventListener('code-visualizer:activity-meta', receiveActivityMeta)
+    return () => {
+      window.removeEventListener('code-visualizer:graph', receiveGraph)
+      window.removeEventListener('code-visualizer:activity-meta', receiveActivityMeta)
+    }
   }, [])
 
   const hierarchy = useMemo(
@@ -340,7 +348,25 @@ export default function App() {
         >
           Architecture
         </button>
+        <button
+          type="button"
+          className={activeView === 'activity' ? 'view-switcher__active' : ''}
+          aria-pressed={activeView === 'activity'}
+          onClick={() => setActiveView('activity')}
+        >
+          Activity
+        </button>
       </nav>
+
+      {activeView === 'activity' && (
+        <Suspense fallback={(
+          <section className="activity-workspace">
+            <div className="activity"><div className="activity__state" role="status"><strong>Loading</strong></div></div>
+          </section>
+        )}>
+          <ActivityView meta={activityMeta} embedded={Boolean(window.__CODE_VISUALIZER_HOST__)} />
+        </Suspense>
+      )}
 
       {activeView === 'code' && <section className="tree-workspace" aria-label="Application code tree">
         <ReactFlow
