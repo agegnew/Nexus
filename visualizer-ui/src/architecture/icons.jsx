@@ -108,77 +108,6 @@ export function IconServer(props) {
   )
 }
 
-export function IconShield(props) {
-  return (
-    <svg viewBox="0 0 48 48" role="presentation" {...props}>
-      <path d="M24 4l16 6v14c0 10-6.8 17-16 20-9.2-3-16-10-16-20V10z" fill="#2f6fc9" stroke="#1d4e94" strokeWidth="1.4" strokeLinejoin="round" />
-      <path d="M24 4l16 6v14c0 10-6.8 17-16 20z" fill="#5b95dd" />
-      <path d="M17 24l5 5 9-10" fill="none" stroke="#f2f7fd" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  )
-}
-
-export function IconUser(props) {
-  return (
-    <svg viewBox="0 0 48 48" role="presentation" {...props}>
-      <circle cx="24" cy="24" r="19" fill="#1f7a8c" />
-      <circle cx="24" cy="19" r="7" fill="#d6f0f5" />
-      <path d="M11 39a13 13 0 0 1 26 0z" fill="#d6f0f5" />
-    </svg>
-  )
-}
-
-export function IconChart(props) {
-  return (
-    <svg viewBox="0 0 48 48" role="presentation" {...props}>
-      <rect x="5" y="5" width="38" height="38" rx="8" fill="#e8f4ec" stroke="#3f8f5f" strokeWidth="1.5" />
-      <rect x="12" y="24" width="6" height="13" rx="1.5" fill="#67b184" />
-      <rect x="21" y="17" width="6" height="20" rx="1.5" fill="#3f8f5f" />
-      <rect x="30" y="11" width="6" height="26" rx="1.5" fill="#2a6e46" />
-    </svg>
-  )
-}
-
-export function IconCard(props) {
-  return (
-    <svg viewBox="0 0 48 48" role="presentation" {...props}>
-      <rect x="4" y="11" width="40" height="26" rx="4" fill="#f3e6d2" stroke="#b6823a" strokeWidth="1.5" />
-      <rect x="4" y="16" width="40" height="6" fill="#b6823a" />
-      <rect x="10" y="28" width="13" height="3.5" rx="1.75" fill="#b6823a" />
-    </svg>
-  )
-}
-
-export function IconPulse(props) {
-  return (
-    <svg viewBox="0 0 48 48" role="presentation" {...props}>
-      <circle cx="24" cy="24" r="19" fill="#4a3f7a" />
-      <path d="M8 24h8l4-10 7 20 4-10h9" fill="none" stroke="#d9d2f5" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  )
-}
-
-export function IconChecklist(props) {
-  return (
-    <svg viewBox="0 0 48 48" role="presentation" {...props}>
-      <rect x="8" y="5" width="32" height="38" rx="4" fill="#e9f5fb" stroke="#2f7fa8" strokeWidth="1.5" />
-      <path d="M14 15l3 3 5-6M14 26l3 3 5-6M14 37l3 3 5-6" fill="none" stroke="#2f7fa8" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M27 16h9M27 27h9M27 38h9" stroke="#8fc2da" strokeWidth="2.2" strokeLinecap="round" />
-    </svg>
-  )
-}
-
-export function IconBoard(props) {
-  return (
-    <svg viewBox="0 0 48 48" role="presentation" {...props}>
-      <rect x="4" y="7" width="40" height="34" rx="4" fill="#1d3c52" stroke="#3f7fa6" strokeWidth="1.5" />
-      <rect x="9" y="13" width="9" height="16" rx="2" fill="#7fc4e8" />
-      <rect x="20" y="13" width="9" height="22" rx="2" fill="#4da3d4" />
-      <rect x="31" y="13" width="9" height="11" rx="2" fill="#9fd8f0" />
-    </svg>
-  )
-}
-
 const DATASTORE = /sql|postgres|mysql|mongo|redis|cosmos|dynamo|sqlite|oracle|cassandra|database/
 const PYTHONISH = /fastapi|flask|django|python|starlette/
 const SPRINGISH = /spring|kotlin|java|quarkus|micronaut/
@@ -211,13 +140,6 @@ export function Glyph({ name, className }) {
     case 'spring': return <IconSpring className={className} />
     case 'node': return <IconNode className={className} />
     case 'server': return <IconServer className={className} />
-    case 'shield': return <IconShield className={className} />
-    case 'user': return <IconUser className={className} />
-    case 'chart': return <IconChart className={className} />
-    case 'card': return <IconCard className={className} />
-    case 'pulse': return <IconPulse className={className} />
-    case 'checklist': return <IconChecklist className={className} />
-    case 'board': return <IconBoard className={className} />
     default: return <IconService className={className} />
   }
 }

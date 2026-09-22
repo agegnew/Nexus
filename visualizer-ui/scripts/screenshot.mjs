@@ -13,34 +13,25 @@ const VIEWS = [
   { fixture: 'taskflow', view: 'code', width: 1440, height: 900 },
   { fixture: 'minimal', view: 'architecture', width: 1440, height: 900 },
   { fixture: 'empty', view: 'architecture', width: 1440, height: 900 },
-  { fixture: 'taskflow', view: 'client', width: 1440, height: 900 },
-  { fixture: 'taskflow', view: 'client', width: 1440, height: 900, present: true },
-  { fixture: 'taskflow', view: 'client', width: 760, height: 900 },
-  { fixture: 'minimal', view: 'client', width: 1440, height: 900, present: true },
 ]
-
-const TAB_LABEL = { architecture: 'Architecture', client: 'Client view' }
 
 const OUT = 'screenshots'
 
-async function capture(browser, { fixture, view, width, height, present = false }) {
+async function capture(browser, { fixture, view, width, height }) {
   const page = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: 2 })
   const errors = []
   page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()) })
   page.on('pageerror', (error) => errors.push(`pageerror: ${error.message}`))
 
-  const query = `demo=${fixture}&view=${view}${present ? '&present=1' : ''}`
-  await page.goto(`http://localhost:5173/?${query}`, { waitUntil: 'networkidle' })
+  await page.goto(`http://localhost:5173/?demo=${fixture}`, { waitUntil: 'networkidle' })
 
-  if (TAB_LABEL[view] && !present) {
-    await page.getByRole('button', { name: TAB_LABEL[view], exact: true }).click()
+  if (view === 'architecture') {
+    await page.getByRole('button', { name: 'Architecture' }).click()
+    await page.waitForSelector('.architecture-workspace')
   }
-  if (view === 'architecture') await page.waitForSelector('.architecture-workspace')
-  if (view === 'client') await page.waitForSelector('.capability-grid')
+  await page.waitForTimeout(1000) // let the fitView transition settle
 
-  await page.waitForTimeout(1000) // let fitView and the card reveal settle
-
-  const file = `${OUT}/${fixture}-${view}${present ? '-present' : ''}-${width}x${height}.png`
+  const file = `${OUT}/${fixture}-${view}-${width}x${height}.png`
   await page.screenshot({ path: file })
   await page.close()
 
@@ -49,13 +40,7 @@ async function capture(browser, { fixture, view, width, height, present = false 
 
 const [fixture, view, width, height] = process.argv.slice(2)
 const targets = fixture
-  ? [{
-      fixture,
-      view: (view ?? 'architecture').replace(/-present$/, ''),
-      present: (view ?? '').endsWith('-present'),
-      width: Number(width ?? 1440),
-      height: Number(height ?? 900),
-    }]
+  ? [{ fixture, view: view ?? 'architecture', width: Number(width ?? 1440), height: Number(height ?? 900) }]
   : VIEWS
 
 await mkdir(OUT, { recursive: true })
