@@ -1,0 +1,14 @@
+{
+  "projectName": "monorepo",
+  "projectPath": "C:/dev/monorepo",
+  "status": "error",
+  "message": "Indexing was interrupted before the project could be scanned.",
+  "stats": {
+    "scannedFiles": 0,
+    "frontendCalls": 0,
+    "backendEndpoints": 0,
+    "matchedCalls": 0
+  },
+  "nodes": [],
+  "edges": []
+}

@@ -10,6 +10,7 @@ import {
 
 import '@xyflow/react/dist/style.css'
 import './App.css'
+import { DEMO_FIXTURES, demoGraph, demoIdFromParams } from './demo'
 
 const ArchitectureDiagram = lazy(() => import('./ArchitectureDiagram'))
 
@@ -251,13 +252,17 @@ export default function App() {
   const projectParams = useMemo(() => new URLSearchParams(window.location.search), [])
   const fallbackProjectName = projectParams.get('projectName') || 'Unknown project'
   const fallbackProjectPath = projectParams.get('projectPath') || 'Path unavailable'
-  const [analysis, setAnalysis] = useState(() => window.__CODE_VISUALIZER_GRAPH__ ?? null)
+  const [demoId, setDemoId] = useState(() => demoIdFromParams(projectParams))
+  const [analysis, setAnalysis] = useState(() => (
+    window.__CODE_VISUALIZER_GRAPH__ ?? (demoId ? demoGraph(demoId) : null)
+  ))
   const [expandedIds, setExpandedIds] = useState(() => new Set([ROOT_ID]))
   const [flowInstance, setFlowInstance] = useState(null)
   const [activeView, setActiveView] = useState('code')
 
   useEffect(() => {
     const receiveGraph = (event) => {
+      setDemoId(null)
       setAnalysis(event.detail)
       setExpandedIds(new Set([ROOT_ID]))
     }
@@ -299,6 +304,13 @@ export default function App() {
   }, [flowInstance])
 
   const collapseAll = useCallback(() => setExpandedIds(new Set([ROOT_ID])), [])
+
+  const selectDemo = useCallback((fixtureId) => {
+    setDemoId(fixtureId)
+    setAnalysis(demoGraph(fixtureId))
+    setExpandedIds(new Set([ROOT_ID]))
+  }, [])
+
   const projectName = analysis?.projectName ?? fallbackProjectName
   const projectPath = analysis?.projectPath ?? fallbackProjectPath
   const isReady = analysis?.status === 'ready'
@@ -340,6 +352,23 @@ export default function App() {
         >
           Architecture
         </button>
+
+        {demoId && (
+          <div className="demo-picker" role="group" aria-label="Demo data set">
+            <span className="demo-picker__badge">Demo data</span>
+            {DEMO_FIXTURES.map((fixture) => (
+              <button
+                key={fixture.id}
+                type="button"
+                className={demoId === fixture.id ? 'demo-picker__active' : ''}
+                aria-pressed={demoId === fixture.id}
+                onClick={() => selectDemo(fixture.id)}
+              >
+                {fixture.label}
+              </button>
+            ))}
+          </div>
+        )}
       </nav>
 
       {activeView === 'code' && <section className="tree-workspace" aria-label="Application code tree">

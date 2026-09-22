@@ -856,3 +856,42 @@
   0%, 100% { opacity: 0.35; transform: scaleX(0.2); }
   50% { opacity: 1; transform: scaleX(1); }
 }
+
+/* Dev-only demo data picker (see src/demo). */
+.demo-picker {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  margin-left: auto;
+  padding-bottom: var(--space-sm);
+}
+
+.demo-picker__badge {
+  margin-right: var(--space-xs);
+  color: var(--text-muted);
+  font-size: 0.625rem;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.demo-picker button {
+  min-height: 24px;
+  padding: 0 var(--space-sm);
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  color: var(--text-muted);
+  background: var(--surface-node);
+  cursor: pointer;
+  font-family: var(--font-code);
+  font-size: 0.6875rem;
+}
+
+.demo-picker button:hover { color: var(--text-primary); background: var(--surface-hover); }
+.demo-picker button:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+
+.demo-picker .demo-picker__active {
+  border-color: var(--project);
+  color: var(--surface-base);
+  background: var(--project);
+}
