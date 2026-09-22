@@ -77,7 +77,7 @@ class OpenAiClient(
             JsonParser.parseString(body).asJsonObject.getAsJsonObject("error").get("message").asString
         }.getOrNull()
         return when (status) {
-            401, 403 -> "OpenAI rejected the API key. Check it in Settings | Tools | Code Visualizer."
+            401, 403 -> "OpenAI rejected the API key. Check it in Settings | Tools | Nexus."
             404 -> "Model \"$model\" is not available for this key."
             429 -> "OpenAI rate limit or quota reached. ${detail.orEmpty()}".trim()
             in 500..599 -> "OpenAI is having trouble (HTTP $status). Try again in a moment."

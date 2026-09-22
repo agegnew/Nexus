@@ -22,7 +22,7 @@ class ActivityService(private val project: Project) {
         val root = repoRoot() ?: return ActivityReport.error("This project is not inside a git repository.")
         val settings = ActivitySettings.getInstance()
         if (!settings.hasApiKey()) {
-            return ActivityReport.error("Add an OpenAI API key in Settings | Tools | Code Visualizer.")
+            return ActivityReport.error("Add an OpenAI API key in Settings | Tools | Nexus.")
         }
 
         val modules = ModuleDetector.detect(root)

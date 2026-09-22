@@ -3,3 +3,15 @@
 .intellijPlatform
 build
 .kotlin
+
+# Secrets - never commit
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Yasin: Nexus Reel exports. Anchored to the working directory the plugin writes
+# (.idea/yasin-reel/), because a bare `yasin-reel/` also matched the player runtime
+# under src/main/resources/ and quietly kept the whole browser half out of the repo.
+/.idea/yasin-reel/

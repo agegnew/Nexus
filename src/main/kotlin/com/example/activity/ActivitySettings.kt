@@ -96,14 +96,14 @@ class ActivitySettings : PersistentStateComponent<ActivitySettings.State> {
     }
 }
 
-/** Settings | Tools | Code Visualizer. */
+/** Settings | Tools | Nexus. */
 class ActivityConfigurable : Configurable {
     private val settings = ActivitySettings.getInstance()
     private val keyField = JBPasswordField()
     private val modelField = JBTextField()
     private var panel: JPanel? = null
 
-    override fun getDisplayName(): String = "Code Visualizer"
+    override fun getDisplayName(): String = "Nexus"
 
     override fun createComponent(): JComponent {
         reset()
