@@ -1,6 +1,7 @@
 package com.example.yasinreel.render
 
 import com.example.MyToolWindowFactory
+import com.example.yasinreel.deck.DeckToolWindowFactory
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.Project
@@ -11,8 +12,8 @@ import com.intellij.openapi.wm.ToolWindowFactory
  * The single Nexus tool window. One button on the sidebar, every view inside it.
  *
  * There used to be two registrations, "Code Visualizer" and "Reel", which put two
- * buttons on the stripe for what is one product. This composes both into one window
- * with a tab each.
+ * buttons on the stripe for what is one product. This composes all three views into one
+ * window with a tab each: the Map, the Reel and the Deck.
  *
  * It deliberately delegates to [MyToolWindowFactory] rather than copying it, because
  * that file belongs to the rest of the team. Their factory adds its own content to the
@@ -43,6 +44,13 @@ class NexusToolWindowFactory : ToolWindowFactory, DumbAware {
         runCatching { ReelToolWindowFactory().createToolWindowContent(project, toolWindow) }
             .onSuccess { nameLastTab(toolWindow, REEL_TAB) }
             .onFailure { logger.warn("Nexus could not build the $REEL_TAB tab", it) }
+
+        // Last, because it is the output you reach for once you have watched the film and
+        // want to take it into a room. Wrapped like the others so one broken tab never
+        // costs the window the other two.
+        runCatching { DeckToolWindowFactory().createToolWindowContent(project, toolWindow) }
+            .onSuccess { nameLastTab(toolWindow, DECK_TAB) }
+            .onFailure { logger.warn("Nexus could not build the $DECK_TAB tab", it) }
     }
 
     /**
@@ -57,5 +65,6 @@ class NexusToolWindowFactory : ToolWindowFactory, DumbAware {
     private companion object {
         const val VISUALIZER_TAB = "Map"
         const val REEL_TAB = "Reel"
+        const val DECK_TAB = "Deck"
     }
 }

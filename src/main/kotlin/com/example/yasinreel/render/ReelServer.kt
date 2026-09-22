@@ -56,6 +56,15 @@ class ReelServer : Disposable {
     }
 
     /**
+     * The deck tab's page, on the same server under its own prefix.
+     *
+     * A second port would mean a second thing that can fail to bind. One server with two
+     * contexts costs nothing, and the longest matching prefix wins, so `/deck` takes
+     * everything under it and the reel keeps the rest.
+     */
+    fun deckUrl(): String = baseUrl() + "/" + DECK_PREFIX + "/index.html"
+
+    /**
      * Serves the built visualizer-ui on the port its own tool window already asks for.
      *
      * MyToolWindowFactory hard-codes http://localhost:5173, so the Map tab is blank
@@ -89,15 +98,18 @@ class ReelServer : Disposable {
         // another IDE window or with Vite on 5173.
         val http = HttpServer.create(InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0)
         http.createContext("/") { exchange -> serve(exchange, RESOURCE_ROOT) }
+        http.createContext("/" + DECK_PREFIX) { exchange -> serve(exchange, DECK_ROOT, DECK_PREFIX + "/") }
         http.executor = null
         http.start()
         logger.info("Nexus Reel server listening on 127.0.0.1:${http.address.port}")
         return http
     }
 
-    private fun serve(exchange: HttpExchange, root: String) {
+    private fun serve(exchange: HttpExchange, root: String, strip: String = "") {
         try {
-            val requested = exchange.requestURI.path.trimStart('/').ifEmpty { "index.html" }
+            val requested = exchange.requestURI.path.trimStart('/')
+                .removePrefix(strip)
+                .ifEmpty { "index.html" }
 
             val clip = if (requested.startsWith("$TTS_DIR/")) readClip(requested.removePrefix("$TTS_DIR/")) else null
             // A single page app asks for paths that are not files, so the Map root
@@ -172,6 +184,10 @@ class ReelServer : Disposable {
 
         /** The built visualizer-ui, copied here from visualizer-ui/dist by Gradle. */
         private const val MAP_ROOT = "nexus-map"
+
+        /** The deck tab, served under [DECK_PREFIX] on the same port as the reel. */
+        private const val DECK_ROOT = "yasin-deck"
+        private const val DECK_PREFIX = "deck"
 
         /** The port MyToolWindowFactory already asks for. */
         private const val VITE_PORT = 5173

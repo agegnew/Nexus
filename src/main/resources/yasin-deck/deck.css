@@ -1,0 +1,184 @@
+/*
+ * The deck tab, wearing the same light palette as the reel so the two tabs read as one
+ * product. Values are duplicated rather than imported because this page is served from
+ * its own root and a stylesheet shared across two roots would be one more thing that can
+ * 404 in a shipped plugin.
+ */
+:root {
+  --surface-base: #F3F5F9;
+  --surface-raised: #FFFFFF;
+  --surface-hover: #E9EEF5;
+  --border-subtle: #DCE3ED;
+  --text-primary: #101828;
+  --text-secondary: #4A5768;
+  --text-muted: #79859A;
+  --accent: #2F6BFF;
+  --accent-warm: #F0790B;
+  --danger: #D92D20;
+  --font-ui: "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+  --font-code: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-lg: 16px;
+  --space-xl: 24px;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+
+body {
+  margin: 0;
+  background: var(--surface-base);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.deck { display: flex; flex-direction: column; min-height: 100vh; }
+
+.deck__head {
+  display: flex; align-items: baseline; gap: var(--space-sm);
+  padding: var(--space-md) var(--space-lg);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.deck__eyebrow {
+  text-transform: uppercase; letter-spacing: .08em; font-size: 10px; color: var(--text-muted);
+}
+.deck__project { font-size: 13px; color: var(--text-secondary); font-weight: 600; }
+
+/* ---------------------------------------------------------------- the picker */
+
+.picker { padding: var(--space-xl) var(--space-lg); display: grid; gap: var(--space-lg); container-type: inline-size; }
+.picker__lede { margin: 0; color: var(--text-secondary); max-width: 54ch; }
+.picker__foot { margin: 0; color: var(--text-muted); font-size: 12px; }
+.picker__foot[data-tone="error"] { color: var(--danger); }
+
+/* Single column by default: an IntelliJ tool window is often very narrow. */
+.picker__cuts { display: grid; gap: var(--space-md); }
+@container (min-width: 620px) { .picker__cuts { grid-template-columns: 1fr 1fr; } }
+
+.cut {
+  display: grid; grid-template-columns: auto 1fr; column-gap: 14px; align-items: start;
+  text-align: left; cursor: pointer;
+  padding: var(--space-lg);
+  background: var(--surface-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  color: inherit; font: inherit;
+  box-shadow: 0 1px 2px rgba(13, 21, 38, .04);
+  transition: background .15s ease, border-color .15s ease, box-shadow .15s ease;
+}
+.cut > :not(.ic) { grid-column: 2; }
+.cut:hover { background: var(--surface-hover); border-color: var(--accent); box-shadow: 0 2px 10px rgba(13, 21, 38, .08); }
+.cut:focus-visible { outline: 2px solid var(--accent-warm); outline-offset: 2px; }
+.cut[disabled] { opacity: .55; cursor: progress; }
+
+.cut__kind { text-transform: uppercase; letter-spacing: .08em; font-size: 10px; color: var(--text-muted); }
+.cut__name { font-size: 15px; }
+.cut__blurb { color: var(--text-secondary); }
+.cut__state { font-family: var(--font-code); font-size: 11px; color: var(--text-muted); }
+.cut__state[data-state="working"] { color: var(--accent-warm); }
+.cut__state[data-state="ready"] { color: #12B76A; }
+.cut__state[data-state="failed"] { color: var(--danger); }
+
+/* The icon on a picker button, the same artwork the slides use. */
+.ic {
+  grid-row: 1 / span 4; align-self: center;
+  width: 38px; height: 38px;
+  display: grid; place-items: center;
+  border-radius: 28%;
+  background: color-mix(in oklab, var(--ic-tint, #2F6BFF) 13%, #FFFFFF);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--ic-tint, #2F6BFF) 26%, transparent);
+}
+.ic__art { width: 66%; height: 66%; background-repeat: no-repeat; background-position: 50% 50%; background-size: contain; }
+
+/* ---------------------------------------------------------------- the result */
+
+.result { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+
+.result__bar {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-md);
+  flex-wrap: wrap;
+  padding: var(--space-md) var(--space-lg);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface-raised);
+}
+.result__meta { display: flex; flex-direction: column; min-width: 0; }
+.result__title { font-size: 13px; }
+.result__sub { font-size: 11px; color: var(--text-muted); }
+.result__actions { display: flex; gap: 6px; flex-wrap: wrap; }
+
+.chip {
+  padding: 4px 12px;
+  border: 1px solid var(--border-subtle); border-radius: 999px;
+  background: var(--surface-raised); color: var(--text-primary);
+  font: inherit; font-size: 12px; cursor: pointer;
+}
+.chip:hover { border-color: var(--accent); }
+.chip:focus-visible { outline: 2px solid var(--accent-warm); outline-offset: 2px; }
+.chip--go { background: var(--accent); border-color: var(--accent); color: #FFFFFF; }
+.chip--go:hover { background: #2559D8; border-color: #2559D8; }
+
+/* ------------------------------------------------------------- the thumbnails */
+
+.sheet {
+  flex: 1; min-height: 0; overflow-y: auto;
+  display: grid; gap: var(--space-lg);
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  padding: var(--space-lg);
+  align-content: start;
+}
+
+.thumb { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+
+/*
+ * A fixed 1280x720 coordinate space scaled by one transform, exactly as the reel stage
+ * is. It is what lets every shape below be positioned in the same pixels the .pptx
+ * writer converts to EMU, with no second set of numbers to keep in step.
+ */
+.thumb__frame {
+  position: relative; overflow: hidden;
+  width: 100%; aspect-ratio: 16 / 9;
+  background: #FFFFFF;
+  border: 1px solid var(--border-subtle); border-radius: 6px;
+  box-shadow: 0 1px 2px rgba(13, 21, 38, .05);
+}
+.thumb__stage { position: absolute; top: 0; left: 0; width: 1280px; height: 720px; transform-origin: 0 0; }
+.thumb__cap { display: flex; gap: 6px; align-items: baseline; min-width: 0; }
+.thumb__no { font-family: var(--font-code); font-size: 11px; color: var(--text-muted); flex: 0 0 auto; }
+.thumb__name { font-size: 11px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* One shape, one absolutely positioned box. Nothing here decides anything. */
+.sh { position: absolute; }
+.sh--box { border-radius: 0; }
+.sh--text { display: flex; flex-direction: column; overflow: hidden; }
+.sh--text p { margin: 0; }
+.sh--pic { background-repeat: no-repeat; background-position: 50% 50%; background-size: contain; }
+
+/* --------------------------------------------------------------- the notice */
+
+.notice {
+  position: sticky; top: 0; z-index: 20;
+  display: flex; align-items: flex-start; gap: var(--space-md);
+  padding: 10px var(--space-lg);
+  border-bottom: 1px solid #D8A33B;
+  font-size: 12px; line-height: 1.45;
+  background: #FAE3A8; color: #4A3A12;
+}
+.notice[data-tone="ok"] {
+  background: var(--surface-raised); color: var(--text-secondary); border-bottom-color: var(--border-subtle);
+}
+.notice__text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.notice__head { font-weight: 700; }
+.notice__close {
+  flex: 0 0 auto;
+  border: 1px solid currentColor; border-radius: 4px;
+  padding: 3px 8px; background: transparent; color: inherit;
+  font: inherit; font-size: 11px; cursor: pointer; opacity: .75;
+}
+.notice__close:hover { opacity: 1; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: .001ms !important; transition-duration: .001ms !important; }
+}

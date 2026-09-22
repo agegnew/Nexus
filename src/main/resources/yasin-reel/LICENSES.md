@@ -35,7 +35,12 @@ dividers), `sparkles`, `lock` (locked), `check` (check mark button), `compass`,
 > OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 The icons are used as-is. None has been recoloured or redrawn; the tinted disc each one
-sits on is drawn by `reel.css` around the artwork, not painted into it.
+sits on is drawn around the artwork by `reel.css`, or by the deck's own geometry, and is
+never painted into it.
+
+The same sixteen also ship as PNGs at `../yasin-deck/icons`, embedded in every generated
+`.pptx`. They were rasterised from the very data URIs in `runtime/icons.js` rather than
+fetched a second time, so the deck and the film cannot drift into two similar sets.
 
 ## GSAP
 

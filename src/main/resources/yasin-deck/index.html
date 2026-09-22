@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Nexus Deck</title>
+  <link rel="stylesheet" href="deck.css"/>
+</head>
+<body>
+<main class="deck" id="deck">
+
+  <header class="deck__head">
+    <span class="deck__eyebrow">Nexus Deck</span>
+    <strong class="deck__project" id="project-name">-</strong>
+  </header>
+
+  <!--
+    Sibling of both the picker and the preview, for the same reason the reel's banner is:
+    the picker is hidden the moment a deck is built, and a notice living inside it would
+    disappear exactly when the reader most needs to see it.
+  -->
+  <aside class="notice" id="notice" hidden role="status" aria-live="polite" data-tone="warn">
+    <div class="notice__text">
+      <strong class="notice__head" id="notice-head"></strong>
+      <span class="notice__body" id="notice-body"></span>
+    </div>
+    <button class="notice__close" id="notice-close" type="button">Dismiss</button>
+  </aside>
+
+  <section class="picker" id="picker" aria-label="Choose a deck">
+    <p class="picker__lede">
+      Turn this codebase into a presentation. One click each, and the second is fast
+      because the project only has to be understood once.
+    </p>
+
+    <div class="picker__cuts">
+      <button class="cut" id="cut-technical" type="button" data-audience="technical">
+        <span class="cut__kind">For an engineering review</span>
+        <strong class="cut__name">Technical deck</strong>
+        <small class="cut__blurb">Architecture, one traced path, the stack and what the analysis could not find.</small>
+        <span class="cut__state" data-state="idle">Not built yet</span>
+      </button>
+
+      <button class="cut" id="cut-stakeholder" type="button" data-audience="stakeholder">
+        <span class="cut__kind">For everyone else</span>
+        <strong class="cut__name">Stakeholder deck</strong>
+        <small class="cut__blurb">The problem, what a person can now do, and what comes next. No jargon.</small>
+        <span class="cut__state" data-state="idle">Not built yet</span>
+      </button>
+    </div>
+
+    <p class="picker__foot" id="status">Waiting for the IDE.</p>
+  </section>
+
+  <section class="result" id="result" hidden aria-label="The deck">
+    <div class="result__bar">
+      <div class="result__meta">
+        <strong class="result__title" id="result-title"></strong>
+        <span class="result__sub" id="result-sub"></span>
+      </div>
+      <div class="result__actions">
+        <button class="chip chip--go" id="open" type="button">Open</button>
+        <button class="chip" id="reveal" type="button">Show in Finder</button>
+        <button class="chip" id="back" type="button">Back</button>
+      </div>
+    </div>
+
+    <!--
+      The preview is drawn from the same list of positioned shapes the .pptx is written
+      from, so it cannot show a slide the file does not contain.
+    -->
+    <div class="sheet" id="sheet"></div>
+  </section>
+
+</main>
+
+<script src="runtime/preview.js"></script>
+<script src="runtime/deck.js"></script>
+</body>
+</html>

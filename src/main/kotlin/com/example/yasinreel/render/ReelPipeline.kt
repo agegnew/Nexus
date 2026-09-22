@@ -122,40 +122,13 @@ class ReelPipeline(private val project: Project) {
         onNotice: (KeyDiagnosis, Boolean) -> Unit
     ) {
         val startedAt = System.currentTimeMillis()
-        val cache = ProductModelCache.getInstance(project)
         indicator.isIndeterminate = false
 
         try {
-            // Resolved once per run, so the offline path is announced a single time
-            // rather than once per stage that notices the missing key. Held as the
-            // concrete type because the diagnosis the banner needs is not on the interface.
-            val engine = engineOrNull(onProgress)
-
-            stage(indicator, onProgress, 0.05, "Checking what changed since the last reel")
-            val hash = inReadAction(indicator, onProgress, "content hash") { cache.contentHash() }
-            val cached = cache.get(hash)
-
-            val evidence: Evidence
-            val model: ProductModel?
-
-            if (cached != null) {
-                evidence = cached.evidence
-                model = cached.model
-                stage(indicator, onProgress, 0.6, "Reusing what this project was already understood to be")
-            } else {
-                stage(indicator, onProgress, 0.15, "Harvesting facts from the project")
-                evidence = inReadAction(indicator, onProgress, "harvest") { EvidenceHarvester.harvest(project) }
-                stage(
-                    indicator, onProgress, 0.35,
-                    "Read ${evidence.stats.totalFiles} files and ${evidence.stats.totalLines} lines"
-                )
-
-                model = understand(engine, evidence, indicator, onProgress)
-                if (model != null) cache.put(hash, evidence, model)
-            }
-
-            writeWorkingFile("evidence.json", evidence)
-            model?.let { writeWorkingFile("product-model.json", it) }
+            val understood = buildUnderstanding(indicator, onProgress)
+            val engine = understood.engine
+            val evidence = understood.evidence
+            val model = understood.model
 
             stage(indicator, onProgress, 0.7, "Directing the $audience cut")
             val directed = directCut(engine, model, evidence, audience, targetMs, onProgress)
@@ -175,7 +148,7 @@ class ReelPipeline(private val project: Project) {
             val silent = storyboard.scenes.count { it.narration.isNullOrBlank() }
             logger.info(
                 "Nexus Reel produced the $audience cut in ${System.currentTimeMillis() - startedAt}ms " +
-                    "(cache ${if (cached != null) "hit" else "miss"}, model ${if (model != null) "yes" else "fallback"}, " +
+                    "(cache ${if (understood.cacheHit) "hit" else "miss"}, model ${if (model != null) "yes" else "fallback"}, " +
                     "ai wrote it: ${directed.byAi}, ${clips.size} narration clips, " +
                     "${storyboard.scenes.size - silent} of ${storyboard.scenes.size} scenes speak)"
             )
@@ -200,6 +173,62 @@ class ReelPipeline(private val project: Project) {
             logger.warn("Nexus Reel could not generate the $audience cut", e)
             onError(e.message ?: "Reel generation failed.")
         }
+    }
+
+    /**
+     * The result of stages 1 and 2, which the deck needs exactly as much as the film does.
+     */
+    data class Understanding(
+        val engine: OpenAiNarrativeEngine?,
+        val evidence: Evidence,
+        val model: ProductModel?,
+        val cacheHit: Boolean
+    )
+
+    /**
+     * Stages 1 and 2: harvest the project, then work out what it is.
+     *
+     * Public because [com.example.yasinreel.deck.DeckPipeline] runs the same two stages
+     * and it would be absurd for it to read the same project a second time. It is also
+     * why a deck lands almost immediately once a film has been made, and the other way
+     * round: the expensive part is done once per project and cached, and everything
+     * downstream is a different way of telling the same understanding.
+     *
+     * Must be called from a background thread with a progress indicator: it harvests
+     * under a read action and then makes network calls.
+     */
+    fun buildUnderstanding(indicator: ProgressIndicator, onProgress: (String) -> Unit): Understanding {
+        val cache = ProductModelCache.getInstance(project)
+
+        // Resolved once per run, so the offline path is announced a single time rather
+        // than once per stage that notices the missing key. Held as the concrete type
+        // because the diagnosis the banner needs is not on the interface.
+        val engine = engineOrNull(onProgress)
+
+        stage(indicator, onProgress, 0.05, "Checking what changed since the last run")
+        val hash = inReadAction(indicator, onProgress, "content hash") { cache.contentHash() }
+        val cached = cache.get(hash)
+
+        if (cached != null) {
+            stage(indicator, onProgress, 0.6, "Reusing what this project was already understood to be")
+            writeWorkingFile("evidence.json", cached.evidence)
+            writeWorkingFile("product-model.json", cached.model)
+            return Understanding(engine, cached.evidence, cached.model, cacheHit = true)
+        }
+
+        stage(indicator, onProgress, 0.15, "Harvesting facts from the project")
+        val evidence = inReadAction(indicator, onProgress, "harvest") { EvidenceHarvester.harvest(project) }
+        stage(
+            indicator, onProgress, 0.35,
+            "Read ${evidence.stats.totalFiles} files and ${evidence.stats.totalLines} lines"
+        )
+
+        val model = understand(engine, evidence, indicator, onProgress)
+        if (model != null) cache.put(hash, evidence, model)
+
+        writeWorkingFile("evidence.json", evidence)
+        model?.let { writeWorkingFile("product-model.json", it) }
+        return Understanding(engine, evidence, model, cacheHit = false)
     }
 
     /** Stage 2. Returns null on any AI failure, which sends directing down the offline path. */
