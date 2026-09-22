@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
+import { Glyph, glyphForTechnology } from './architecture/icons'
+
 const MIN_ZOOM = 0.7
 const MAX_ZOOM = 1.3
 const ZOOM_STEP = 0.1
@@ -110,12 +112,14 @@ export default function ArchitectureDiagram({ analysis }) {
 
             <article className="architecture-component architecture-component--frontend">
               <span className="architecture-component__type">Application</span>
+              <Glyph name="client" className="architecture-component__icon" />
               <strong>Frontend</strong>
               <small>{plural(summary.frontendCalls, 'API call')}</small>
             </article>
 
             <article className="architecture-component architecture-component--api">
               <span className="architecture-component__type">HTTP interface</span>
+              <Glyph name="gateway" className="architecture-component__icon" />
               <strong>API routes</strong>
               <small>{plural(summary.matched, 'matched request')}</small>
             </article>
@@ -128,12 +132,14 @@ export default function ArchitectureDiagram({ analysis }) {
                   style={{ top: serviceStart + index * serviceGap - 39 }}
                 >
                   <span className="architecture-component__type">Service</span>
+                  <Glyph name={glyphForTechnology(service.name)} className="architecture-component__icon" />
                   <strong>{service.name}</strong>
                   <small>{plural(service.handlers, 'handler')}</small>
                 </article>
               )) : (
                 <article className="architecture-component architecture-component--service architecture-component--empty">
                   <span className="architecture-component__type">Service</span>
+                  <Glyph name="server" className="architecture-component__icon" />
                   <strong>No backend detected</strong>
                 </article>
               )}
@@ -142,6 +148,7 @@ export default function ArchitectureDiagram({ analysis }) {
             {summary.unresolved > 0 && (
               <section className="architecture-external" aria-label="External or unresolved APIs">
                 <span className="architecture-component__type">Outside project</span>
+                <Glyph name="external" className="architecture-component__icon" />
                 <strong>External / unresolved API</strong>
                 <small>{plural(summary.unresolved, 'call')}</small>
               </section>

@@ -1062,3 +1062,81 @@ body {
 .cut > :not(.ic) { grid-column: 2; }
 .cut { box-shadow: 0 1px 2px rgba(13, 21, 38, .04); }
 .cut:hover { box-shadow: 0 2px 10px rgba(13, 21, 38, .08); }
+
+/* ---- reel scope ----------------------------------------------------------
+ * Merged in from main, where it was written against the dark stage. The colours
+ * below named tokens this stylesheet does not define, so every one of them fell
+ * through to a dark literal and the panel came out as a slate box on white paper.
+ * They now point at the tokens that do exist, so the control follows the theme.
+ */
+/* Picks what the film is about: the whole product, or the work done in a period. */
+
+.scope {
+  margin: 0 0 18px;
+  padding: 14px 16px;
+  border: 1px solid var(--border-subtle, #DCE3ED);
+  border-radius: 10px;
+  background: var(--surface-raised, #FFFFFF);
+}
+
+.scope__legend {
+  padding: 0 6px;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted, #79859A);
+}
+
+.scope__modes { display: flex; flex-wrap: wrap; gap: 14px; }
+
+.scope__mode {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  cursor: pointer;
+}
+
+.scope__mode span { display: grid; gap: 2px; }
+.scope__mode strong { font-size: 13px; }
+.scope__mode small { color: var(--text-muted, #79859A); font-size: 11px; }
+
+.scope__range {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-subtle, #DCE3ED);
+}
+
+.scope__field { display: grid; gap: 3px; }
+.scope__field > span { font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted, #79859A); }
+
+.scope__field select,
+.scope__field input[type="date"] {
+  padding: 5px 7px;
+  font: inherit;
+  font-size: 12px;
+  color: inherit;
+  background: var(--surface-base, #F3F5F9);
+  border: 1px solid var(--border-subtle, #DCE3ED);
+  border-radius: 6px;
+}
+
+.scope__dates {
+  align-self: center;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted, #79859A);
+}
+
+.scope__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: center;
+  font-size: 12px;
+  color: var(--text-muted, #79859A);
+  cursor: pointer;
+}

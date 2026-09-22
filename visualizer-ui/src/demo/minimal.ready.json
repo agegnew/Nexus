@@ -1,0 +1,24 @@
+{
+  "projectName": "notes-api",
+  "projectPath": "C:/dev/notes-api",
+  "status": "ready",
+  "message": "Static analysis completed.",
+  "stats": {
+    "scannedFiles": 18,
+    "frontendCalls": 2,
+    "backendEndpoints": 1,
+    "matchedCalls": 1
+  },
+  "nodes": [
+    { "id": "route-0", "kind": "endpoint", "label": "GET /api/notes", "subtitle": "FastAPI endpoint", "technology": "FastAPI" },
+    { "id": "backend-0", "kind": "backend", "label": "NoteRouter.list_notes()", "subtitle": "api/notes.py:11", "technology": "FastAPI", "filePath": "api/notes.py", "line": 11 },
+    { "id": "frontend-0", "kind": "frontend", "label": "App.jsx", "subtitle": "ui/src/App.jsx:14", "filePath": "ui/src/App.jsx", "line": 14 },
+    { "id": "unmatched-1", "kind": "unmatched", "label": "POST /api/notes", "subtitle": "No matching backend endpoint" },
+    { "id": "frontend-1", "kind": "frontend", "label": "App.jsx", "subtitle": "ui/src/App.jsx:29", "filePath": "ui/src/App.jsx", "line": 29 }
+  ],
+  "edges": [
+    { "id": "handles-0", "source": "route-0", "target": "backend-0", "label": "handles" },
+    { "id": "requests-0", "source": "frontend-0", "target": "route-0", "label": "GET" },
+    { "id": "requests-1", "source": "frontend-1", "target": "unmatched-1", "label": "POST" }
+  ]
+}

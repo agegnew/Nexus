@@ -17,6 +17,13 @@
 
     <extensions defaultExtensionNs="com.intellij">
 
+        <!-- Settings | Tools | Nexus: the OpenAI key and model used by the Activity tab. -->
+        <applicationConfigurable
+                parentId="tools"
+                id="com.example.activity.settings"
+                displayName="Nexus"
+                instance="com.example.activity.ActivityConfigurable"/>
+
         <!-- One window, one button on the stripe, a tab per view inside. The factory
              delegates to MyToolWindowFactory for the Map tab, so that file stays owned
              by the rest of the team and is not edited by this work. -->

@@ -1,6 +1,7 @@
 package com.example.yasinreel.deck
 
 import com.example.yasinreel.model.Audience
+import com.example.yasinreel.model.ReelScope
 import com.example.yasinreel.render.ReelExporter
 import com.example.yasinreel.render.ReelPipeline
 import com.google.gson.GsonBuilder
@@ -94,7 +95,19 @@ class DeckPipeline(private val project: Project) {
         val startedAt = System.currentTimeMillis()
         indicator.isIndeterminate = false
         try {
-            val understood = ReelPipeline.getInstance(project).buildUnderstanding(indicator, onProgress)
+            /*
+             * The whole project, not a date range.
+             *
+             * `buildUnderstanding` gained a scope on main, where a reel can also be a
+             * recap of the work done in a period. A deck of a fortnight's commits is a
+             * real idea and not this one, so it asks for the launch scope, which is the
+             * only scope that can never come back empty. The null branch is therefore
+             * unreachable and is still handled, because a signature that can return null
+             * will eventually return null.
+             */
+            val understood = ReelPipeline.getInstance(project)
+                .buildUnderstanding(ReelScope.launch(), indicator, onProgress)
+                ?: throw IllegalStateException("There was nothing in this project to build a deck from.")
 
             step(indicator, onProgress, 0.72, "Laying out the $audience deck")
             val model = understood.model

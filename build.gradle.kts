@@ -41,9 +41,13 @@ val uiModules = File(uiDir, "node_modules")
 val mapResources = layout.projectDirectory.dir("src/main/resources/nexus-map").asFile
 val hasNodeModules = uiModules.isDirectory
 
+// Windows resolves npm through npm.cmd; plain "npm" is not an executable there and the
+// task fails to start the process. Resolved at configuration time like the paths above.
+val npmCommand = if (System.getProperty("os.name").lowercase().contains("windows")) "npm.cmd" else "npm"
+
 val bundleVisualizerUi by tasks.registering(Exec::class) {
     workingDir = uiDir
-    commandLine("npm", "run", "build")
+    commandLine(npmCommand, "run", "build")
     // A clean checkout with no npm install still builds: the committed bundle is used.
     // Set at configuration time rather than via onlyIf, whose closure would capture a
     // reference back into this script and break the configuration cache.
@@ -53,10 +57,17 @@ val bundleVisualizerUi by tasks.registering(Exec::class) {
     outputs.dir(uiDist)
 }
 
-val copyVisualizerUi by tasks.registering(Copy::class) {
+// Sync rather than Copy: Vite fingerprints every asset, so a plain copy leaves the previous
+// build's hashed files behind and they accumulate in git forever. dist holds the whole served
+// tree (index.html, favicon.svg, icons.svg and assets), so mirroring it is safe.
+val copyVisualizerUi by tasks.registering(Sync::class) {
     dependsOn(bundleVisualizerUi)
     from(uiDist)
     into(mapResources)
+    // Disabled for the same reason the build above is: without node_modules there is no fresh
+    // dist to mirror, and a Sync from a missing directory would delete the committed bundle and
+    // leave the Map blank. Skipping keeps the checked-in build, which is the whole point of it.
+    enabled = hasNodeModules
 }
 
 tasks.named("processResources") { dependsOn(copyVisualizerUi) }

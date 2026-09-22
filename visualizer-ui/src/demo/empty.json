@@ -1,0 +1,14 @@
+{
+  "projectName": "gradle-tooling",
+  "projectPath": "C:/dev/gradle-tooling",
+  "status": "empty",
+  "message": "No supported React API calls, FastAPI routes, or Spring endpoints were detected.",
+  "stats": {
+    "scannedFiles": 64,
+    "frontendCalls": 0,
+    "backendEndpoints": 0,
+    "matchedCalls": 0
+  },
+  "nodes": [],
+  "edges": []
+}

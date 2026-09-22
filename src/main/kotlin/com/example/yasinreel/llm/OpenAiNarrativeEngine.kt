@@ -150,8 +150,12 @@ class OpenAiNarrativeEngine(private val settings: ReelSettings) : NarrativeEngin
             Prompts.DIRECT_TECHNICAL_SYSTEM
         }
 
+        // A recap is told to people who already know the product, so the overlay goes after the
+        // audience prompt and overrides the "introduce the product" framing it opens with.
+        val framed = if (evidence.recap != null) system + "\n" + Prompts.RECAP_OVERLAY else system
+
         val messages = JsonArray()
-        messages.add(textMessage("system", system + "\n" + Prompts.SHOW_THE_REAL_THING))
+        messages.add(textMessage("system", framed + "\n" + Prompts.SHOW_THE_REAL_THING))
         messages.add(textMessage("user", directUserPrompt(model, evidence, audience, targetMs)))
 
         val payload = basePayload(settings.directingModel, messages).apply {
@@ -183,6 +187,22 @@ class OpenAiNarrativeEngine(private val settings: ReelSettings) : NarrativeEngin
         val seconds = targetMs / 1000
         return buildString {
             append("AUDIENCE: ").append(audience).append('\n')
+            evidence.recap?.let { recap ->
+                append("RECAP RANGE: ").append(recap.since).append(" to ").append(recap.until)
+                append(" (").append(recap.area).append(")\n")
+                append("RECAP FACTS: ").append(recap.commits).append(" commits, ")
+                append(recap.filesTouched).append(" files, +").append(recap.linesAdded)
+                append(" -").append(recap.linesDeleted)
+                if (recap.uncommittedFiles > 0) {
+                    append(", ").append(recap.uncommittedFiles).append(" files not committed yet")
+                }
+                append('\n')
+                if (recap.subjects.isNotEmpty()) {
+                    append("WHAT THE COMMITS SAY, newest first:\n")
+                    recap.subjects.forEach { append("  - ").append(it).append('\n') }
+                }
+                append('\n')
+            }
             append("TARGET RUNTIME: ").append(seconds).append(" seconds (").append(targetMs).append(" ms)\n")
             append("Use ").append(suggestedSceneCount(targetMs)).append(" scenes, opening on `title` and closing on `outro`.\n\n")
 

@@ -21,7 +21,35 @@ data class Evidence(
     val entryPoints: List<FileRef>,
     val chains: List<Chain>,
     val palette: Palette,
-    val notableFiles: List<NotableFile>
+    val notableFiles: List<NotableFile>,
+    /**
+     * Set only for a recap reel. Null means the evidence is the whole project, which is what
+     * every existing caller and every cached evidence.json expects, so the default keeps them
+     * reading correctly.
+     */
+    val recap: RecapFacts? = null
+)
+
+/**
+ * What a recap reel is about: the work done in a date range, as read from git.
+ *
+ * It rides on [Evidence] rather than being threaded through the director signatures, so the
+ * prompts, the offline director and the validator all see it without any of them changing shape.
+ */
+data class RecapFacts(
+    /** yyyy-MM-dd bounds, inclusive. */
+    val since: String,
+    val until: String,
+    /** "all", "frontend", "backend" or a module name. */
+    val area: String,
+    val commits: Int,
+    val filesTouched: Int,
+    val linesAdded: Int,
+    val linesDeleted: Int,
+    val uncommittedFiles: Int,
+    val authors: List<String>,
+    /** Commit subjects, newest first — the plainest statement of intent the history has. */
+    val subjects: List<String>
 )
 
 data class EvidenceStats(

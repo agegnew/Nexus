@@ -10,8 +10,10 @@ import {
 
 import '@xyflow/react/dist/style.css'
 import './App.css'
+import { DEMO_FIXTURES, demoGraph, demoIdFromParams } from './demo'
 
 const ArchitectureDiagram = lazy(() => import('./ArchitectureDiagram'))
+const ActivityView = lazy(() => import('./views/ActivityView'))
 
 const ROOT_ID = 'project-root'
 const HORIZONTAL_GAP = 300
@@ -251,18 +253,29 @@ export default function App() {
   const projectParams = useMemo(() => new URLSearchParams(window.location.search), [])
   const fallbackProjectName = projectParams.get('projectName') || 'Unknown project'
   const fallbackProjectPath = projectParams.get('projectPath') || 'Path unavailable'
-  const [analysis, setAnalysis] = useState(() => window.__CODE_VISUALIZER_GRAPH__ ?? null)
+  const [demoId, setDemoId] = useState(() => demoIdFromParams(projectParams))
+  const [analysis, setAnalysis] = useState(() => (
+    window.__CODE_VISUALIZER_GRAPH__ ?? (demoId ? demoGraph(demoId) : null)
+  ))
   const [expandedIds, setExpandedIds] = useState(() => new Set([ROOT_ID]))
   const [flowInstance, setFlowInstance] = useState(null)
   const [activeView, setActiveView] = useState('code')
+  const [activityMeta, setActivityMeta] = useState(() => window.__CODE_VISUALIZER_ACTIVITY_META__ ?? null)
 
   useEffect(() => {
     const receiveGraph = (event) => {
+      setDemoId(null)
       setAnalysis(event.detail)
       setExpandedIds(new Set([ROOT_ID]))
     }
+    // The IDE pushes the activity scopes alongside each graph, so the dropdown needs no setup.
+    const receiveActivityMeta = (event) => setActivityMeta(event.detail)
     window.addEventListener('code-visualizer:graph', receiveGraph)
-    return () => window.removeEventListener('code-visualizer:graph', receiveGraph)
+    window.addEventListener('code-visualizer:activity-meta', receiveActivityMeta)
+    return () => {
+      window.removeEventListener('code-visualizer:graph', receiveGraph)
+      window.removeEventListener('code-visualizer:activity-meta', receiveActivityMeta)
+    }
   }, [])
 
   const hierarchy = useMemo(
@@ -292,13 +305,14 @@ export default function App() {
     })
   }, [])
 
-  const fitMeasuredTree = useCallback(() => {
-    window.requestAnimationFrame(() => {
-      flowInstance?.fitView({ padding: 0.22, duration: 420, maxZoom: 1.05 })
-    })
-  }, [flowInstance])
-
   const collapseAll = useCallback(() => setExpandedIds(new Set([ROOT_ID])), [])
+
+  const selectDemo = useCallback((fixtureId) => {
+    setDemoId(fixtureId)
+    setAnalysis(demoGraph(fixtureId))
+    setExpandedIds(new Set([ROOT_ID]))
+  }, [])
+
   const projectName = analysis?.projectName ?? fallbackProjectName
   const projectPath = analysis?.projectPath ?? fallbackProjectPath
   const isReady = analysis?.status === 'ready'
@@ -340,7 +354,42 @@ export default function App() {
         >
           Architecture
         </button>
+        <button
+          type="button"
+          className={activeView === 'activity' ? 'view-switcher__active' : ''}
+          aria-pressed={activeView === 'activity'}
+          onClick={() => setActiveView('activity')}
+        >
+          Activity
+        </button>
+
+        {demoId && (
+          <div className="demo-picker" role="group" aria-label="Demo data set">
+            <span className="demo-picker__badge">Demo data</span>
+            {DEMO_FIXTURES.map((fixture) => (
+              <button
+                key={fixture.id}
+                type="button"
+                className={demoId === fixture.id ? 'demo-picker__active' : ''}
+                aria-pressed={demoId === fixture.id}
+                onClick={() => selectDemo(fixture.id)}
+              >
+                {fixture.label}
+              </button>
+            ))}
+          </div>
+        )}
       </nav>
+
+      {activeView === 'activity' && (
+        <Suspense fallback={(
+          <section className="activity-workspace">
+            <div className="activity"><div className="activity__state" role="status"><strong>Loading</strong></div></div>
+          </section>
+        )}>
+          <ActivityView meta={activityMeta} embedded={Boolean(window.__CODE_VISUALIZER_HOST__)} />
+        </Suspense>
+      )}
 
       {activeView === 'code' && <section className="tree-workspace" aria-label="Application code tree">
         <ReactFlow
@@ -348,7 +397,6 @@ export default function App() {
           edges={tree.edges}
           nodeTypes={nodeTypes}
           onInit={setFlowInstance}
-          onNodesInitialized={fitMeasuredTree}
           onNodeClick={handleNodeClick}
           nodesDraggable={false}
           nodesConnectable={false}
@@ -404,7 +452,7 @@ export default function App() {
       {activeView === 'architecture' && !isReady && (
         <section className="architecture-workspace" aria-label="System architecture diagram">
           <div className="analysis-state" role="status">
-            <strong>{analysis?.status === 'error' ? 'Analysis failed' : 'Architecture is not ready'}</strong>
+            <strong>{analysis?.status === 'error' ? 'Analysis failed' : 'Nothing to map yet'}</strong>
             <span>{analysis?.message ?? 'Reading detected services and API relationships.'}</span>
           </div>
         </section>
