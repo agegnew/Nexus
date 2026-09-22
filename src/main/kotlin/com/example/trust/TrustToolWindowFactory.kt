@@ -1,11 +1,14 @@
 package com.example.trust
 
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.fileEditor.OpenFileDescriptor
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.wm.ToolWindow
 import com.intellij.openapi.wm.ToolWindowFactory
+import com.intellij.openapi.Disposable
+import com.intellij.openapi.util.Disposer
 import com.intellij.ui.ColoredListCellRenderer
 import com.intellij.ui.SimpleTextAttributes
 import com.intellij.ui.components.JBLabel
@@ -41,14 +44,17 @@ class TrustToolWindowFactory : ToolWindowFactory, DumbAware {
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
         val panel = TrustPanel(project)
         val content = ContentFactory.getInstance().createContent(panel, "", false)
+        // Tied to the window, so the message bus subscription dies with the tab.
+        Disposer.register(toolWindow.disposable, panel)
         toolWindow.contentManager.addContent(content)
     }
 }
 
-private class TrustPanel(private val project: Project) : JPanel(BorderLayout()) {
+private class TrustPanel(private val project: Project) : JPanel(BorderLayout()), Disposable {
 
     private val model = DefaultListModel<FileTrust>()
     private val summary = JBLabel()
+    private val provenance = JBLabel()
     private val paintButton = JButton()
 
     private val list = JBList(model).apply {
@@ -69,15 +75,19 @@ private class TrustPanel(private val project: Project) : JPanel(BorderLayout()) 
                 if (folder.isNotEmpty()) {
                     append("  $folder", SimpleTextAttributes.GRAYED_SMALL_ATTRIBUTES)
                 }
+                val percent = value.percentUnproven()
                 append(
                     "   ${value.unprovenLines} never run",
                     SimpleTextAttributes.ERROR_ATTRIBUTES,
                 )
-                if (value.staleLines > 0) {
+                if (value.totalLines > 0) {
                     append(
-                        "   ${value.staleLines} stale",
-                        SimpleTextAttributes.GRAYED_ATTRIBUTES,
+                        " of ${value.totalLines}  ($percent%)",
+                        SimpleTextAttributes.GRAYED_SMALL_ATTRIBUTES,
                     )
+                }
+                if (value.changedSinceRun) {
+                    append("   changed since the run", SimpleTextAttributes.GRAYED_SMALL_ATTRIBUTES)
                 }
             }
         }
@@ -110,11 +120,28 @@ private class TrustPanel(private val project: Project) : JPanel(BorderLayout()) 
             }
         })
 
+        provenance.foreground = JBUI.CurrentTheme.Label.disabledForeground()
+        provenance.border = JBUI.Borders.emptyTop(6)
+
         add(header, BorderLayout.NORTH)
         add(JBScrollPane(list), BorderLayout.CENTER)
+        add(provenance, BorderLayout.SOUTH)
+
+        // A finished run is the moment the answer can change, so the tab listens for it rather
+        // than making the user press Refresh to find out something already happened.
+        project.messageBus.connect(this).subscribe(
+            TrustListener.TOPIC,
+            object : TrustListener {
+                override fun trustChanged() {
+                    ApplicationManager.getApplication().invokeLater({ reload() }, project.disposed)
+                }
+            },
+        )
 
         reload()
     }
+
+    override fun dispose() = Unit
 
     private fun reload() {
         val service = TrustService.getInstance(project)
@@ -134,6 +161,10 @@ private class TrustPanel(private val project: Project) : JPanel(BorderLayout()) 
             else -> "$lines line(s) across $files file(s) have never been executed"
         }
         summary.toolTipText = "Source: ${service.sourceLabel}"
+        provenance.text = when (val described = service.describeSource()) {
+            null -> "No coverage report found yet. Run your tests with coverage and this fills in."
+            else -> if (service.isPlaceholder()) "$described  (not a real run yet)" else described
+        }
         updatePaintButton()
     }
 

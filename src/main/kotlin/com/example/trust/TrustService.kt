@@ -4,19 +4,39 @@ import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.util.messages.Topic
+
+/** Fired whenever the verdict may have changed, so the paint and the tab redraw together. */
+interface TrustListener {
+    fun trustChanged()
+
+    companion object {
+        @Topic.ProjectLevel
+        val TOPIC: Topic<TrustListener> = Topic.create("nexus trust changed", TrustListener::class.java)
+    }
+}
 
 /**
  * The one place that knows the trust verdict for this project, and whether the paint is on.
  *
- * Off by default on purpose. A feature that colours somebody's code has to be asked for, and a
- * half-built one must never be able to spoil a teammate's demo: the switch is the difference
- * between "turn it off" and "revert the branch" when something misbehaves.
+ * Off by default unless the project asked otherwise. A feature that colours somebody's code has
+ * to be asked for, and a half-built one must never be able to spoil a teammate's demo: the
+ * switch is the difference between "turn it off" and "revert the branch" when something misbehaves.
  */
 @Service(Service.Level.PROJECT)
 class TrustService(private val project: Project) {
 
-    /** Swappable so a coverage-backed source can replace the fixture without any UI change. */
-    private val source: ExecutionSource = FixtureExecutionSource()
+    private val coverage = CoverageReportSource()
+
+    /**
+     * Real coverage first, the fixture only when there is none.
+     *
+     * This ordering is the whole honesty of the feature: the moment somebody runs their tests
+     * with coverage, the placeholder stops being consulted and never comes back.
+     */
+    private val source: ExecutionSource = CompositeExecutionSource(
+        listOf(coverage, FixtureExecutionSource()),
+    )
 
     @Volatile
     private var explicit: Boolean? = null
@@ -24,7 +44,7 @@ class TrustService(private val project: Project) {
     /**
      * Off unless the project asked otherwise, and then whatever the user last chose.
      *
-     * The first read consults the source: a project carrying a `.nexus/trust.json` with
+     * The first read consults the fixture: a project carrying a `.nexus/trust.json` with
      * `"autoEnable": true` has opted in, so the paint is already on when its files are opened.
      * Any toggle after that is the user's word and wins for the rest of the session.
      */
@@ -38,19 +58,36 @@ class TrustService(private val project: Project) {
         return next
     }
 
-    private fun projectDefault(): Boolean =
-        (source as? FixtureExecutionSource)?.autoEnable(project) ?: false
-
     val sourceLabel: String get() = source.label
+
+    /** "from backend/coverage.xml, 4 minute(s) ago", or null when nothing is known. */
+    fun describeSource(): String? = source.describe(project)
+
+    /** True while the numbers are placeholder data, so the UI can say so out loud. */
+    fun isPlaceholder(): Boolean = coverage.reportPath == null && allKnown().isNotEmpty()
 
     /** Null when nothing is known about the file, which the UI shows differently from "all proven". */
     fun trustFor(file: VirtualFile): FileTrust? = source.trustFor(project, file)
 
-    /** Every file the current source has an opinion about. Used for project-wide numbers. */
-    fun allKnown(): Map<String, FileTrust> =
-        (source as? FixtureExecutionSource)?.all(project) ?: emptyMap()
+    /** Every file the current source has an opinion about. */
+    fun allKnown(): Map<String, FileTrust> = source.all(project)
+
+    /**
+     * Re-reads the report and tells everyone. Called when a run finishes, which is the moment
+     * the answer can actually have changed, and the moment the colour is supposed to move.
+     */
+    fun refresh() {
+        coverage.invalidate()
+        if (!project.isDisposed) {
+            project.messageBus.syncPublisher(TrustListener.TOPIC).trustChanged()
+        }
+    }
+
+    private fun projectDefault(): Boolean = FIXTURE.autoEnable(project)
 
     companion object {
+        private val FIXTURE = FixtureExecutionSource()
+
         fun getInstance(project: Project): TrustService = project.service()
     }
 }

@@ -63,6 +63,13 @@ data class FileTrust(
     val unproven: List<LineRange> = emptyList(),
     val stale: List<LineRange> = emptyList(),
     val totalLines: Int = 0,
+    /**
+     * The file was edited after the run that produced this verdict.
+     *
+     * Kept as a flag rather than by painting the whole file amber: the honest statement is
+     * "this answer is older than the code", not "every line here is suspect".
+     */
+    val changedSinceRun: Boolean = false,
 ) {
 
     val unprovenLines: Int get() = unproven.sumOf { it.lineCount }

@@ -53,6 +53,17 @@
         <listener
                 class="com.example.trust.TrustEditorListener"
                 topic="com.intellij.openapi.fileEditor.FileEditorManagerListener"/>
+
+        <!-- A finished run is the only moment the answer can change, so that is when the
+             coverage report is re-read and the colour moves. -->
+        <listener
+                class="com.example.trust.TrustRunListener"
+                topic="com.intellij.execution.ExecutionListener"/>
+
+        <!-- Repaints open editors and the status bar when the verdict changes. -->
+        <listener
+                class="com.example.trust.TrustRepaintListener"
+                topic="com.example.trust.TrustListener"/>
     </projectListeners>
 
     <actions>

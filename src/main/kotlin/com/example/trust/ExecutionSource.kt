@@ -23,6 +23,40 @@ interface ExecutionSource {
 
     /** Null when this source has nothing to say about the file, which is different from "all clean". */
     fun trustFor(project: Project, file: VirtualFile): FileTrust?
+
+    /** Everything this source knows about the project, keyed by project-relative path. */
+    fun all(project: Project): Map<String, FileTrust>
+
+    /** One sentence for the UI: where these numbers came from and how old they are. */
+    fun describe(project: Project): String? = null
+}
+
+/**
+ * Asks each source in turn and keeps the first that has an opinion.
+ *
+ * Order is the whole point: real coverage from a real run beats a fixture every time, and the
+ * fixture only exists so the feature still shows something on a machine where nobody has run
+ * the tests yet. When coverage is present the fixture is never consulted.
+ */
+class CompositeExecutionSource(private val sources: List<ExecutionSource>) : ExecutionSource {
+
+    override val label: String
+        get() = sources.firstOrNull { it.hasData }?.label ?: sources.first().label
+
+    private val ExecutionSource.hasData: Boolean
+        get() = this !is CoverageReportSource || reportPath != null
+
+    override fun trustFor(project: Project, file: VirtualFile): FileTrust? =
+        sources.firstNotNullOfOrNull { source ->
+            source.all(project).takeIf { it.isNotEmpty() }?.let { source.trustFor(project, file) }
+        }
+
+    override fun all(project: Project): Map<String, FileTrust> =
+        sources.firstNotNullOfOrNull { it.all(project).takeIf(Map<String, FileTrust>::isNotEmpty) }
+            ?: emptyMap()
+
+    override fun describe(project: Project): String? =
+        sources.firstOrNull { it.all(project).isNotEmpty() }?.describe(project)
 }
 
 /**
@@ -61,7 +95,7 @@ class FixtureExecutionSource : ExecutionSource {
     }
 
     /** Everything the fixture knows, for callers that want project-wide numbers. */
-    fun all(project: Project): Map<String, FileTrust> {
+    override fun all(project: Project): Map<String, FileTrust> {
         val base = project.basePath ?: return emptyMap()
         return load(base)
     }
@@ -78,6 +112,9 @@ class FixtureExecutionSource : ExecutionSource {
         load(base)
         return cachedAutoEnable
     }
+
+    override fun describe(project: Project): String? =
+        if (all(project).isEmpty()) null else "from $FIXTURE_PATH, placeholder data"
 
     private fun relativePath(base: String, file: VirtualFile): String? {
         val path = file.path
