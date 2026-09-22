@@ -17,10 +17,20 @@ const VIEWS = [
 
 const OUT = 'screenshots'
 
+// Outside the IDE there is no plugin on 5174, so vite's proxy for the Reel and
+// Deck paths fails. nexusPanels.js expects that and shows a message; it is not a
+// regression, so it must not fail a run.
+const PLUGIN_PATH = /\/(nexus\.json|reel|deck|shared)(\/|$|\?)/i
+
 async function capture(browser, { fixture, view, width, height }) {
   const page = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: 2 })
   const errors = []
-  page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()) })
+  page.on('console', (message) => {
+    if (message.type() !== 'error') return
+    // The path is on the location, not in the text ("Failed to load resource...").
+    if (PLUGIN_PATH.test(message.location()?.url ?? '')) return
+    errors.push(message.text())
+  })
   page.on('pageerror', (error) => errors.push(`pageerror: ${error.message}`))
 
   await page.goto(`http://localhost:5173/?demo=${fixture}`, { waitUntil: 'networkidle' })
