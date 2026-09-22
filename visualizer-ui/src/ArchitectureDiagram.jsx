@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Background,
+  BackgroundVariant,
   Controls,
   Handle,
   MarkerType,
@@ -9,6 +10,7 @@ import {
 } from '@xyflow/react'
 
 import { buildArchitecture } from './architecture/layout'
+import { Glyph, glyphForRoute, glyphForTechnology } from './architecture/icons'
 
 function ArchBoundary({ data }) {
   return (
@@ -23,8 +25,13 @@ function ArchGroup({ data }) {
     <div className={`arch-group arch-group--${data.tone}`}>
       <Handle type="target" position={Position.Left} className="arch-handle" />
       <header className="arch-group__header">
-        <strong>{data.title}</strong>
-        <small>{data.caption}</small>
+        {data.technology && (
+          <Glyph name={glyphForTechnology(data.technology)} className="arch-group__icon" />
+        )}
+        <span className="arch-group__title">
+          <strong>{data.title}</strong>
+          <small>{data.caption}</small>
+        </span>
       </header>
       {data.empty && <p className="arch-group__empty">Nothing detected</p>}
       <span className="arch-group__footnote">{data.footnote}</span>
@@ -34,53 +41,62 @@ function ArchGroup({ data }) {
 
 function ArchActor({ data }) {
   return (
-    <div className="arch-actor">
-      <strong>{data.label}</strong>
-      <small>{data.detail}</small>
+    <figure className="arch-figure">
+      <Glyph name="client" className="arch-figure__icon" />
+      <figcaption>
+        <strong>{data.label}</strong>
+        <small>{data.detail}</small>
+      </figcaption>
       <Handle type="source" position={Position.Right} className="arch-handle" />
-    </div>
+    </figure>
   )
 }
 
 function ArchModule({ data }) {
   return (
-    <article className="arch-card arch-card--frontend" title={data.path}>
-      <div className="arch-card__row">
+    <figure className="arch-figure arch-figure--module" title={data.path}>
+      <Glyph name="module" className="arch-figure__icon" />
+      {data.callCount > 1 && <span className="arch-figure__badge">{data.callCount}</span>}
+      <figcaption>
         <strong>{data.name}</strong>
-        <span className="arch-card__count">{data.callCount}</span>
-      </div>
-      <small className="arch-card__path">{data.directory}</small>
+        <small>{data.directory}</small>
+      </figcaption>
       <Handle type="source" position={Position.Right} className="arch-handle" />
-    </article>
+    </figure>
   )
 }
 
 function ArchRoute({ data }) {
+  const location = data.filePath ? `${data.filePath}:${data.line}` : data.path
+
   return (
-    <article className="arch-card arch-card--backend" title={data.filePath ? `${data.filePath}:${data.line}` : data.path}>
+    <figure className="arch-figure arch-figure--route" title={location}>
       <Handle type="target" position={Position.Left} className="arch-handle" />
-      <div className="arch-card__row">
-        <span className={`arch-method arch-method--${data.method.toLowerCase()}`}>{data.method}</span>
-        <code className="arch-card__route">{data.path}</code>
-      </div>
-      <small className="arch-card__handler">
-        {data.handler}
-        {data.line ? <span className="arch-card__line">:{data.line}</span> : null}
-      </small>
-    </article>
+      <Glyph name={glyphForRoute(data.technology)} className="arch-figure__icon" />
+      <figcaption>
+        <span className="arch-route">
+          <b className={`arch-method arch-method--${data.method.toLowerCase()}`}>{data.method}</b>
+          <code>{data.path}</code>
+        </span>
+        <small>{data.handler}</small>
+      </figcaption>
+    </figure>
   )
 }
 
 function ArchExternal({ data }) {
   return (
-    <article className="arch-card arch-card--unmatched" title={data.path}>
+    <figure className="arch-figure arch-figure--external" title={data.path}>
       <Handle type="target" position={Position.Left} className="arch-handle" />
-      <div className="arch-card__row">
-        <span className={`arch-method arch-method--${data.method.toLowerCase()}`}>{data.method}</span>
-        <code className="arch-card__route">{data.path}</code>
-      </div>
-      <small className="arch-card__handler">No backend match</small>
-    </article>
+      <Glyph name="external" className="arch-figure__icon" />
+      <figcaption>
+        <span className="arch-route">
+          <b className={`arch-method arch-method--${data.method.toLowerCase()}`}>{data.method}</b>
+          <code>{data.path}</code>
+        </span>
+        <small>No backend match</small>
+      </figcaption>
+    </figure>
   )
 }
 
@@ -93,7 +109,7 @@ const nodeTypes = {
   archExternal: memo(ArchExternal),
 }
 
-const FIT_OPTIONS = { padding: 0.14, maxZoom: 1 }
+const FIT_OPTIONS = { padding: 0.12, maxZoom: 1 }
 
 function plural(count, singular, multiple = `${singular}s`) {
   return `${count} ${count === 1 ? singular : multiple}`
@@ -106,9 +122,12 @@ export default function ArchitectureDiagram({ analysis }) {
   const styledEdges = useMemo(() => edges.map((edge) => ({
     ...edge,
     type: 'smoothstep',
+    pathOptions: { borderRadius: 14 },
     className: `arch-edge${edge.data?.unresolved ? ' arch-edge--unresolved' : ''}`,
-    labelShowBg: false,
-    markerEnd: { type: MarkerType.ArrowClosed, width: 16, height: 16 },
+    labelBgPadding: [6, 3],
+    labelBgBorderRadius: 3,
+    labelBgStyle: { fill: '#ffffff', fillOpacity: 0.92 },
+    markerEnd: { type: MarkerType.ArrowClosed, width: 15, height: 15, color: '#2b3340' },
   })), [edges])
 
   const fit = useCallback(() => {
@@ -145,14 +164,14 @@ export default function ArchitectureDiagram({ analysis }) {
         fitViewOptions={FIT_OPTIONS}
         proOptions={{ hideAttribution: true }}
       >
-        <Background color="oklch(31% 0.01 185)" gap={28} size={1} />
+        <Background variant={BackgroundVariant.Dots} color="#c9d2dd" gap={22} size={1.2} />
         <Controls position="bottom-left" showInteractive={false} />
       </ReactFlow>
 
       <div className="arch-key" aria-label="Architecture legend">
-        <span><i className="arch-key__frontend" />Client module</span>
-        <span><i className="arch-key__backend" />Route → handler</span>
-        {summary.externals > 0 && <span><i className="arch-key__unmatched" />Unresolved</span>}
+        <span><Glyph name="module" /> Client module</span>
+        <span><Glyph name="service" /> Route handler</span>
+        {summary.externals > 0 && <span><Glyph name="external" /> Unresolved</span>}
       </div>
     </section>
   )

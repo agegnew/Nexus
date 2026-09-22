@@ -2,19 +2,19 @@
 // external actors outside a dashed project boundary, named components inside
 // labelled group boxes, and one labelled edge per detected call.
 
-const ACTOR = { width: 168, height: 66 }
-const MODULE = { width: 224, height: 58 }
-const ROUTE = { width: 286, height: 66 }
-const EXTERNAL = { width: 224, height: 58 }
+const ACTOR = { width: 150, height: 118 }
+const MODULE = { width: 182, height: 116 }
+const ROUTE = { width: 226, height: 130 }
+const EXTERNAL = { width: 196, height: 116 }
 
-const GROUP_PAD_X = 14
-const GROUP_HEADER = 40
-const GROUP_PAD_BOTTOM = 14
-const ROW_GAP = 12
-const GROUP_GAP = 28
-const COLUMN_GAP = 132
-const BOUNDARY_PAD = 32
-const BOUNDARY_LABEL = 16
+const GROUP_PAD_X = 18
+const GROUP_HEADER = 58
+const GROUP_PAD_BOTTOM = 30
+const ROW_GAP = 16
+const GROUP_GAP = 34
+const COLUMN_GAP = 150
+const BOUNDARY_PAD = 38
+const BOUNDARY_LABEL = 18
 
 const Z = { boundary: 0, group: 1, component: 2 }
 
@@ -193,6 +193,7 @@ export function buildArchitecture(analysis) {
       style: { width: serviceGroupWidth, height },
       data: {
         tone: 'backend',
+        technology: group.technology,
         title: group.technology,
         caption: `${group.routes.length} ${group.routes.length === 1 ? 'route' : 'routes'}`,
         footnote: 'Service',
