@@ -27,6 +27,130 @@
   var noticeBody = document.getElementById('notice-body');
   var noticeFix = document.getElementById('notice-fix');
 
+
+  // ---- reel scope ----------------------------------------------------------
+  // The same periods the Activity tab offers, so "last week" means one thing in
+  // this plugin. Kept inline because this runtime is plain scripts, not modules.
+
+  function isoDay(date) {
+    return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  }
+
+  function startOfWeek(date) {
+    var start = new Date(date);
+    start.setDate(start.getDate() - ((start.getDay() + 6) % 7));
+    return start;
+  }
+
+  function shiftDays(date, days) {
+    var next = new Date(date);
+    next.setDate(next.getDate() + days);
+    return next;
+  }
+
+  function periodDates(id) {
+    var today = new Date();
+    switch (id) {
+      case 'this-week': return [startOfWeek(today), today];
+      case 'last-week': return [shiftDays(startOfWeek(today), -7), shiftDays(startOfWeek(today), -1)];
+      case 'this-month': return [new Date(today.getFullYear(), today.getMonth(), 1), today];
+      case 'last-month': return [
+        new Date(today.getFullYear(), today.getMonth() - 1, 1),
+        new Date(today.getFullYear(), today.getMonth(), 0)
+      ];
+      case 'last-30': return [shiftDays(today, -29), today];
+      default: return null;
+    }
+  }
+
+  function el(id) { return document.getElementById(id); }
+
+  function scopeMode() {
+    var checked = document.querySelector('input[name="reel-scope"]:checked');
+    return checked ? checked.value : 'launch';
+  }
+
+  function currentRange() {
+    var period = el('scope-period');
+    var chosen = period ? period.value : 'last-week';
+    if (chosen === 'custom') {
+      var from = el('scope-from');
+      var to = el('scope-to');
+      return { since: from && from.value, until: to && to.value };
+    }
+    var pair = periodDates(chosen);
+    return pair ? { since: isoDay(pair[0]), until: isoDay(pair[1]) } : { since: '', until: '' };
+  }
+
+  function refreshScopeUi() {
+    var recap = scopeMode() === 'recap';
+    var range = el('scope-range');
+    if (range) range.hidden = !recap;
+
+    var custom = el('scope-period') && el('scope-period').value === 'custom';
+    var fromField = el('scope-from-field');
+    var toField = el('scope-to-field');
+    if (fromField) fromField.hidden = !custom;
+    if (toField) toField.hidden = !custom;
+
+    var dates = el('scope-dates');
+    if (dates) {
+      var current = currentRange();
+      dates.textContent = custom || !current.since ? '' : current.since + ' → ' + current.until;
+    }
+  }
+
+  // The scope is part of a film's identity: a recap of last week is not the film a
+  // recap of last month is, so replaying by audience alone would show the wrong one.
+  function scopePayload() {
+    if (scopeMode() !== 'recap') return { scope: 'launch' };
+    var range = currentRange();
+    var area = el('scope-area');
+    var mine = el('scope-mine');
+    var uncommitted = el('scope-uncommitted');
+    return {
+      scope: 'recap',
+      since: range.since || '',
+      until: range.until || '',
+      area: area ? area.value : 'all',
+      mine: mine ? mine.checked : true,
+      uncommitted: uncommitted ? uncommitted.checked : true
+    };
+  }
+
+  function scopeKey(audience) {
+    var payload = scopePayload();
+    return payload.scope === 'launch'
+      ? audience + ':launch'
+      : audience + ':recap:' + payload.since + ':' + payload.until + ':' + payload.area +
+        ':' + payload.mine + ':' + payload.uncommitted;
+  }
+
+  function fillAreas(areas) {
+    var select = el('scope-area');
+    if (!select || !areas || !areas.length) return;
+    var previous = select.value;
+    select.innerHTML = '';
+    areas.forEach(function (area) {
+      var option = document.createElement('option');
+      option.value = area.id;
+      option.textContent = area.label;
+      select.appendChild(option);
+    });
+    if (previous) select.value = previous;
+    if (!select.value) select.value = 'all';
+  }
+
+  document.addEventListener('change', function (event) {
+    if (!event.target.closest || !event.target.closest('#scope')) return;
+    refreshScopeUi();
+  });
+
+  window.addEventListener('yasin-reel:scopes', function (event) {
+    var detail = event.detail || {};
+    fillAreas(detail.areas);
+  });
+
   Array.prototype.forEach.call(document.querySelectorAll('.cut'), function (button) {
     buttons[button.dataset.audience] = button;
   });
@@ -109,7 +233,9 @@
       return false;
     }
     var button = buttons[storyboard.audience];
-    built[storyboard.audience] = storyboard;
+    // Keyed by scope as well as audience: a recap of last week is not the film a recap
+    // of last month is, and replaying by audience alone would show the wrong one.
+    built[scopeKey(storyboard.audience)] = storyboard;
     setState(button, 'ready', 'Built, click to replay');
     try {
       window.NexusReel.play(storyboard);
@@ -127,20 +253,26 @@
   Array.prototype.forEach.call(document.querySelectorAll('.cut'), function (button) {
     button.addEventListener('click', function () {
       var audience = button.dataset.audience;
+      var key = scopeKey(audience);
       // A rebuild starts clean, so a stale verdict never describes the new run.
       hideNotice();
 
       // Already built in this session, so replay rather than pay for it twice. The
       // banner is restored with it, otherwise a replayed offline cut looks AI written.
-      if (built[audience]) {
-        playStoryboard(built[audience]);
+      if (built[key]) {
+        playStoryboard(built[key]);
         if (notices[audience]) showNotice(notices[audience]);
         return;
       }
 
       setState(button, 'working', 'Working...');
-      say('Asking the IDE for the ' + audience + ' cut.');
-      if (toIde({ type: 'generate', audience: audience })) return;
+      var payload = scopePayload();
+      payload.type = 'generate';
+      payload.audience = audience;
+      say(payload.scope === 'recap'
+        ? 'Asking the IDE for the ' + audience + ' recap of ' + payload.since + ' to ' + payload.until + '.'
+        : 'Asking the IDE for the ' + audience + ' launch video.');
+      if (toIde(payload)) return;
 
       setState(button, 'idle', 'Not connected to the IDE');
       if (window.ReelFixture) {
@@ -199,7 +331,10 @@
     // The fixture may already be on screen, and the handshake is no reason to talk
     // over whatever the player is saying about it.
     if (!window.NexusReel.composition()) say('Ready. Pick a cut to build.');
+    refreshScopeUi();
     toIde({ type: 'ready' });
+    // The area list comes from the project, so it is asked for rather than hard-coded.
+    toIde({ type: 'scopes' });
   }
 
   /*

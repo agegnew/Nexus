@@ -256,13 +256,39 @@ class ReelSettings : PersistentStateComponent<ReelSettings.State> {
      * Returning a list instead of one key is what lets the engine walk past a key that
      * comes back 401 or 429 instead of failing the whole run on it.
      */
-    fun apiKeyCandidates(): List<ApiKeyCandidate> {
+    /**
+     * This feature's own sources, with no cross-feature fallback.
+     *
+     * Split out from [apiKeyCandidates] so the Activity tab can fall back to these without the
+     * two aggregates calling each other, which would recurse forever.
+     */
+    fun ownCandidates(): List<ApiKeyCandidate> {
         val found = ArrayList<ApiKeyCandidate>(4)
 
         storedKey()?.let { found.add(ApiKeyCandidate(it, SOURCE_KEYCHAIN)) }
         System.getenv("OPENAI_KEY").orNull()?.let { found.add(ApiKeyCandidate(it, "OPENAI_KEY")) }
         System.getenv("OPENAI_API_KEY").orNull()?.let { found.add(ApiKeyCandidate(it, "OPENAI_API_KEY")) }
         found.addAll(dotEnvCandidates())
+        return found
+    }
+
+    /**
+     * Keys the Activity tab knows about: its own password-safe entry and its key file. Appended
+     * after this feature's own sources, so a key saved in Settings | Tools | Nexus works here
+     * too and neither half of the plugin has to be set up twice.
+     *
+     * Guarded, so a missing or failing Activity service cannot stop a reel being generated.
+     */
+    private fun activityCandidates(): List<ApiKeyCandidate> = runCatching {
+        com.example.activity.ActivitySettings.getInstance()
+            .ownKeyCandidates()
+            .map { (key, source) -> ApiKeyCandidate(key, source) }
+    }.getOrDefault(emptyList())
+
+    fun apiKeyCandidates(): List<ApiKeyCandidate> {
+        val found = ArrayList<ApiKeyCandidate>(6)
+        found.addAll(ownCandidates())
+        found.addAll(activityCandidates())
 
         // First occurrence wins, which is why the list is built in trust order: a key that
         // appears both in the keychain and in some project's .env keeps the better label,

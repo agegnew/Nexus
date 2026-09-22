@@ -297,4 +297,36 @@ sourceRefs are what the viewer clicks to open the real file, and the player also
 screen as small path labels. Give them wherever the evidence has a file and a line in the
 technical cut. Give none at all in the stakeholder cut.
 """
+
+    /**
+     * Added on top of the audience prompt when the evidence carries [RecapFacts].
+     *
+     * A recap and a launch film answer different questions. The launch film says what the
+     * product is; a recap says what happened to it in a window of time, to people who already
+     * know what it is. Without this the model receives a narrowed set of files and describes
+     * them as if they were the whole product, which is the one wrong answer that still looks
+     * plausible.
+     */
+    val RECAP_OVERLAY = """
+        THIS IS A RECAP, NOT A LAUNCH FILM.
+
+        The evidence you have been given is NOT the whole product. It is only the files that
+        changed in a date range, plus the commit subjects and counts under `recap`. The audience
+        already knows what the product is. They want to know what moved.
+
+        Therefore:
+        - Open by naming the period and what it was spent on, not by introducing the product.
+        - The subject is the WORK: what was added, what changed, what it now makes possible.
+        - `recap.subjects` are the developer's own words for what they did. Lead with what they
+          say, in plain language. Do not invent work that is not in that list.
+        - Numbers you may use, because they are counted rather than guessed: commits, files
+          touched, lines added and removed, and how many files are not committed yet.
+        - Do not claim the product is only these files, and do not describe the architecture as
+          if it were this small. Place the work inside the wider system when you refer to it.
+        - Do not say a feature is finished when its files are still uncommitted. Uncommitted work
+          is work in progress; say so.
+        - If the range contains little, say so plainly and keep the film short. A quiet week
+          honestly reported is worth more than a loud one invented.
+    """.trimIndent()
+
 }

@@ -136,9 +136,17 @@ object EvidenceHarvester {
         "cloud" to listOf("aws-sdk", "boto3", "azure", "google-cloud", "firebase", "vercel", "supabase", "kubernetes", "docker")
     )
 
-    fun harvest(project: Project): Evidence {
+    /**
+     * [only] restricts the scan to a set of project-relative paths, which is how a recap reel is
+     * kept to the work done in a date range. Null means the whole project, the original behaviour.
+     *
+     * This narrows the scan alone. Chain detection, the brand palette and the flow analysis walk
+     * the project themselves and still see all of it, which is deliberate: a recap still has to
+     * place the changed files inside the architecture that surrounds them.
+     */
+    fun harvest(project: Project, only: Set<String>? = null): Evidence {
         val projectPath = project.basePath?.replace('\\', '/')?.trimEnd('/').orEmpty()
-        val scan = section("scan", Scan()) { scanProject(project, projectPath) }
+        val scan = section("scan", Scan()) { scanProject(project, projectPath, only) }
         val graph = section<ProjectGraph?>("flow-analysis", null) { ProjectFlowAnalyzer.analyze(project) }
 
         val evidence = Evidence(
@@ -171,12 +179,16 @@ object EvidenceHarvester {
         return scrubbed(evidence)
     }
 
-    private fun scanProject(project: Project, projectPath: String): Scan {
+    private fun scanProject(project: Project, projectPath: String, only: Set<String>?): Scan {
         val scan = Scan()
         ProjectFileIndex.getInstance(project).iterateContent { file ->
             if (!file.isDirectory) {
                 val relative = relativePath(file, projectPath)
-                if (!isIgnored(relative) && !sensitiveNamePattern.matches(file.name)) {
+                // A recap narrows here, which constrains languages, directories, notable files,
+                // entry points, stats and the manifests behind dependencies all at once.
+                if (!isIgnored(relative) && !sensitiveNamePattern.matches(file.name) &&
+                    (only == null || relative in only)
+                ) {
                     // One unreadable file is not a failed harvest, so the guard sits per file.
                     try {
                         record(scan, file, relative)

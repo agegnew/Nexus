@@ -832,3 +832,76 @@ body {
 }
 .tp__reveal:hover { border-color: var(--accent, #48C6BD); }
 .tp__reveal:focus-visible { outline: 2px solid var(--accent-warm, #E2B65C); outline-offset: 2px; }
+
+/* ---- reel scope ---------------------------------------------------------- */
+/* Picks what the film is about: the whole product, or the work done in a period. */
+
+.scope {
+  margin: 0 0 18px;
+  padding: 14px 16px;
+  border: 1px solid var(--line, #2a2f36);
+  border-radius: 10px;
+  background: var(--panel, rgba(255, 255, 255, 0.02));
+}
+
+.scope__legend {
+  padding: 0 6px;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted, #8b95a3);
+}
+
+.scope__modes { display: flex; flex-wrap: wrap; gap: 14px; }
+
+.scope__mode {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  cursor: pointer;
+}
+
+.scope__mode span { display: grid; gap: 2px; }
+.scope__mode strong { font-size: 13px; }
+.scope__mode small { color: var(--muted, #8b95a3); font-size: 11px; }
+
+.scope__range {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line, #2a2f36);
+}
+
+.scope__field { display: grid; gap: 3px; }
+.scope__field > span { font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted, #8b95a3); }
+
+.scope__field select,
+.scope__field input[type="date"] {
+  padding: 5px 7px;
+  font: inherit;
+  font-size: 12px;
+  color: inherit;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--line, #2a2f36);
+  border-radius: 6px;
+}
+
+.scope__dates {
+  align-self: center;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted, #8b95a3);
+}
+
+.scope__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: center;
+  font-size: 12px;
+  color: var(--muted, #8b95a3);
+  cursor: pointer;
+}

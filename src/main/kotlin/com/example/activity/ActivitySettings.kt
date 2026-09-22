@@ -47,15 +47,42 @@ class ActivitySettings : PersistentStateComponent<ActivitySettings.State> {
      * settings dialog, and the file is read-only as far as this class is concerned.
      */
     var apiKey: String
-        get() = resolveKey(
-            stored = PasswordSafe.instance.getPassword(credentials),
-            environment = System.getenv(ENV_VAR),
-            file = keyFile()
-        )
+        get() = ownKey().ifBlank { reelKey() }
         set(value) {
             val trimmed = value.trim()
             PasswordSafe.instance.setPassword(credentials, trimmed.ifBlank { null })
         }
+
+    /**
+     * Only the sources this feature owns, with no cross-feature fallback.
+     *
+     * The Reel settings append this to their own candidate list, so the two must never call
+     * each other's aggregate: that would recurse forever. This is the half that is safe to
+     * call from over there.
+     */
+    fun ownKey(): String = resolveKey(
+        stored = PasswordSafe.instance.getPassword(credentials),
+        environment = System.getenv(ENV_VAR),
+        file = keyFile()
+    )
+
+    /** Our own sources as (key, label) pairs, in trust order, for the Reel's candidate list. */
+    fun ownKeyCandidates(): List<Pair<String, String>> = listOfNotNull(
+        PasswordSafe.instance.getPassword(credentials)?.trim()?.takeIf { it.isNotBlank() }
+            ?.let { it to "the key saved in Settings | Tools | Nexus" },
+        System.getenv(ENV_VAR)?.trim()?.takeIf { it.isNotBlank() }?.let { it to ENV_VAR },
+        keyFile()?.let { resolveKey(null, null, it) }?.takeIf { it.isNotBlank() }
+            ?.let { it to KEY_FILE_DISPLAY }
+    )
+
+    /**
+     * The Reel's own chain: its keychain entry, OPENAI_KEY, and any project .env file.
+     * Guarded, so the Activity tab still works if that feature is absent or its service fails.
+     */
+    private fun reelKey(): String = runCatching {
+        com.example.yasinreel.settings.ReelSettings.getInstance()
+            .ownCandidates().firstOrNull()?.key.orEmpty()
+    }.getOrDefault("")
 
     fun hasApiKey(): Boolean = apiKey.isNotBlank()
 
@@ -66,7 +93,10 @@ class ActivitySettings : PersistentStateComponent<ActivitySettings.State> {
         !PasswordSafe.instance.getPassword(credentials).isNullOrBlank() -> "the IDE password safe"
         !System.getenv(ENV_VAR).isNullOrBlank() -> "the $ENV_VAR environment variable"
         keyFile()?.isNotBlank() == true -> KEY_FILE_DISPLAY
-        else -> "nowhere yet"
+        else -> runCatching {
+            com.example.yasinreel.settings.ReelSettings.getInstance()
+                .ownCandidates().firstOrNull()?.source?.let { "the Reel's $it" }
+        }.getOrNull() ?: "nowhere yet"
     }
 
     companion object {

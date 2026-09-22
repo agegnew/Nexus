@@ -1,6 +1,8 @@
 package com.example.yasinreel.render
 
+import com.example.yasinreel.harvest.ChangedFiles
 import com.example.yasinreel.model.Audience
+import com.example.yasinreel.model.ReelScope
 import com.example.yasinreel.model.Storyboard
 import com.example.yasinreel.settings.KeyDiagnosis
 import com.example.yasinreel.settings.ReelSettings
@@ -154,7 +156,13 @@ class ReelToolWindowFactory : ToolWindowFactory, DumbAware {
             .getOrNull() ?: return
 
         when (val type = message.stringOrNull("type")) {
-            "generate" -> generate(project, browser, message.stringOrNull("audience") ?: Audience.TECHNICAL)
+            "generate" -> generate(
+                project,
+                browser,
+                message.stringOrNull("audience") ?: Audience.TECHNICAL,
+                scopeOf(message)
+            )
+            "scopes" -> sendScopes(project, browser)
             "openFile" -> openInEditor(project, message.stringOrNull("file"), message.intOrNull("line") ?: 1)
             "export" -> export(
                 project,
@@ -185,10 +193,38 @@ class ReelToolWindowFactory : ToolWindowFactory, DumbAware {
         ApplicationManager.getApplication().invokeLater { RevealFileAction.openFile(file) }
     }
 
-    private fun generate(project: Project, browser: JBCefBrowser, audience: String) {
-        logger.info("Nexus Reel generating the $audience cut on request from the player")
+    /**
+     * Reads the recap controls off a generate message. Anything missing or unreadable falls back
+     * to a launch reel, so an older player that knows nothing about ranges still works.
+     */
+    private fun scopeOf(message: JsonObject): ReelScope {
+        val kind = message.stringOrNull("scope") ?: ReelScope.LAUNCH
+        if (kind != ReelScope.RECAP) return ReelScope.launch()
+        val since = message.stringOrNull("since").orEmpty()
+        val until = message.stringOrNull("until").orEmpty()
+        if (since.isBlank() || until.isBlank()) return ReelScope.launch()
+        return ReelScope(
+            kind = ReelScope.RECAP,
+            since = since,
+            until = until,
+            area = message.stringOrNull("area") ?: "all",
+            mine = message.boolOrNull("mine") ?: true,
+            includeUncommitted = message.boolOrNull("uncommitted") ?: true
+        )
+    }
+
+    /** The player asks for the scope list once it loads, so the area picker matches the project. */
+    private fun sendScopes(project: Project, browser: JBCefBrowser) {
+        val areas = runCatching { ChangedFiles.areas(project) }.getOrDefault(emptyList())
+        val detail = gson.toJson(mapOf("areas" to areas))
+        dispatch(browser, EVENT_SCOPES, detail)
+    }
+
+    private fun generate(project: Project, browser: JBCefBrowser, audience: String, scope: ReelScope) {
+        logger.info("Nexus Reel generating the $audience cut (${scope.kind}) on request from the player")
         ReelPipeline.getInstance(project).generate(
             audience = audience,
+            scope = scope,
             onProgress = { message -> dispatch(browser, EVENT_PROGRESS, detail(audience, message)) },
             onDone = { storyboard, clips -> deliver(project, browser, storyboard, clips) },
             onError = { message -> dispatch(browser, EVENT_ERROR, detail(audience, message)) },
@@ -442,6 +478,11 @@ class ReelToolWindowFactory : ToolWindowFactory, DumbAware {
         return if (element.isJsonPrimitive) element.asString else null
     }
 
+    private fun JsonObject.boolOrNull(name: String): Boolean? {
+        val element = get(name) ?: return null
+        return runCatching { element.asBoolean }.getOrNull()
+    }
+
     private fun JsonObject.intOrNull(name: String): Int? {
         val element = get(name) ?: return null
         return runCatching { element.asInt }.getOrNull()
@@ -451,6 +492,9 @@ class ReelToolWindowFactory : ToolWindowFactory, DumbAware {
         const val EVENT_STORYBOARD = "yasin-reel:storyboard"
         const val EVENT_PROGRESS = "yasin-reel:progress"
         const val EVENT_ERROR = "yasin-reel:error"
+
+        /** The area list for the recap picker, sent when the player reports ready. */
+        const val EVENT_SCOPES = "yasin-reel:scopes"
         const val EVENT_NOTICE = "yasin-reel:notice"
         const val EVENT_TOOLCHAIN = "yasin-reel:toolchain"
         const val EVENT_EXPORT_PROGRESS = "yasin-reel:export-progress"

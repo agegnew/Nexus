@@ -34,6 +34,55 @@
       faster because the analysis is already done.
     </p>
 
+    <fieldset class="scope" id="scope">
+      <legend class="scope__legend">What the film is about</legend>
+
+      <div class="scope__modes" role="radiogroup" aria-label="Reel subject">
+        <label class="scope__mode">
+          <input type="radio" name="reel-scope" value="launch" checked>
+          <span><strong>Launch video</strong><small>What the product is, from the whole codebase.</small></span>
+        </label>
+        <label class="scope__mode">
+          <input type="radio" name="reel-scope" value="recap">
+          <span><strong>Recap</strong><small>What was built in a period, from the commits in it.</small></span>
+        </label>
+      </div>
+
+      <div class="scope__range" id="scope-range" hidden>
+        <label class="scope__field">
+          <span>Period</span>
+          <select id="scope-period">
+            <option value="this-week">This week</option>
+            <option value="last-week" selected>Last week</option>
+            <option value="this-month">This month</option>
+            <option value="last-month">Last month</option>
+            <option value="last-30">Last 30 days</option>
+            <option value="custom">Custom range</option>
+          </select>
+        </label>
+
+        <label class="scope__field" id="scope-from-field" hidden>
+          <span>From</span>
+          <input type="date" id="scope-from">
+        </label>
+
+        <label class="scope__field" id="scope-to-field" hidden>
+          <span>To</span>
+          <input type="date" id="scope-to">
+        </label>
+
+        <span class="scope__dates" id="scope-dates"></span>
+
+        <label class="scope__field">
+          <span>Area</span>
+          <select id="scope-area"><option value="all">All</option></select>
+        </label>
+
+        <label class="scope__toggle"><input type="checkbox" id="scope-mine" checked> Only my commits</label>
+        <label class="scope__toggle"><input type="checkbox" id="scope-uncommitted" checked> Include uncommitted</label>
+      </div>
+    </fieldset>
+
     <div class="picker__cuts">
       <button class="cut" id="cut-technical" type="button" data-audience="technical">
         <span class="cut__kind">For developers</span>

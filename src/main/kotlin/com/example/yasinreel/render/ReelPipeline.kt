@@ -1,6 +1,9 @@
 package com.example.yasinreel.render
 
+import com.example.yasinreel.harvest.ChangedFiles
 import com.example.yasinreel.harvest.EvidenceHarvester
+import com.example.yasinreel.model.RecapFacts
+import com.example.yasinreel.model.ReelScope
 import com.example.yasinreel.llm.EvidenceTools
 import com.example.yasinreel.llm.FallbackDirector
 import com.example.yasinreel.llm.NarrativeEngine
@@ -68,6 +71,7 @@ class ReelPipeline(private val project: Project) {
 
     fun generate(
         audience: String,
+        scope: ReelScope = ReelScope.launch(),
         onProgress: (String) -> Unit,
         onDone: (Storyboard, List<TtsClient.SceneAudio>) -> Unit,
         onError: (String) -> Unit,
@@ -90,7 +94,7 @@ class ReelPipeline(private val project: Project) {
 
         val task = object : Task.Backgroundable(project, "Generating the product reel", true) {
             override fun run(indicator: ProgressIndicator) {
-                runPipeline(audience, targetMs, indicator, progress, done, failed, notice)
+                runPipeline(audience, scope, targetMs, indicator, progress, done, failed, notice)
             }
 
             override fun onFinished() {
@@ -114,6 +118,7 @@ class ReelPipeline(private val project: Project) {
 
     private fun runPipeline(
         audience: String,
+        scope: ReelScope,
         targetMs: Int,
         indicator: ProgressIndicator,
         onProgress: (String) -> Unit,
@@ -132,7 +137,24 @@ class ReelPipeline(private val project: Project) {
             val engine = engineOrNull(onProgress)
 
             stage(indicator, onProgress, 0.05, "Checking what changed since the last reel")
-            val hash = inReadAction(indicator, onProgress, "content hash") { cache.contentHash() }
+
+            // A recap is about the work in a range, so it harvests a different set of files and
+            // must not reuse a model built from the whole project. The range is folded into the
+            // cache key rather than skipping the cache, so re-running the same recap is still free.
+            val changed = ChangedFiles.resolve(project, scope)
+            if (scope.isRecap && changed == null) {
+                onProgress("No history could be read for that range, so this is the whole project instead.")
+            }
+            if (changed != null && changed.isEmpty) {
+                onError("Nothing changed ${scope.describe()}, so there is no recap to build.")
+                return
+            }
+            changed?.let {
+                onProgress("Found ${it.paths.size} files changed ${scope.describe()} across ${it.commits} commits.")
+            }
+
+            val hash = inReadAction(indicator, onProgress, "content hash") { cache.contentHash() } +
+                if (changed != null) ":${scope.kind}:${scope.since}:${scope.until}:${scope.area}:${changed.paths.size}" else ""
             val cached = cache.get(hash)
 
             val evidence: Evidence
@@ -144,7 +166,25 @@ class ReelPipeline(private val project: Project) {
                 stage(indicator, onProgress, 0.6, "Reusing what this project was already understood to be")
             } else {
                 stage(indicator, onProgress, 0.15, "Harvesting facts from the project")
-                evidence = inReadAction(indicator, onProgress, "harvest") { EvidenceHarvester.harvest(project) }
+                val harvested = inReadAction(indicator, onProgress, "harvest") {
+                    EvidenceHarvester.harvest(project, changed?.paths)
+                }
+                // The range facts travel with the evidence, so the director and the prompts get
+                // them without any signature between here and there having to change.
+                evidence = if (changed == null) harvested else harvested.copy(
+                    recap = RecapFacts(
+                        since = scope.since,
+                        until = scope.until,
+                        area = scope.area,
+                        commits = changed.commits,
+                        filesTouched = changed.paths.size,
+                        linesAdded = changed.added,
+                        linesDeleted = changed.deleted,
+                        uncommittedFiles = changed.uncommitted,
+                        authors = changed.authors,
+                        subjects = changed.subjects.take(MAX_RECAP_SUBJECTS)
+                    )
+                )
                 stage(
                     indicator, onProgress, 0.35,
                     "Read ${evidence.stats.totalFiles} files and ${evidence.stats.totalLines} lines"
@@ -157,7 +197,8 @@ class ReelPipeline(private val project: Project) {
             writeWorkingFile("evidence.json", evidence)
             model?.let { writeWorkingFile("product-model.json", it) }
 
-            stage(indicator, onProgress, 0.7, "Directing the $audience cut")
+            val cutLabel = if (scope.isRecap) "$audience recap" else "$audience launch"
+            stage(indicator, onProgress, 0.7, "Directing the $cutLabel")
             val directed = directCut(engine, model, evidence, audience, targetMs, onProgress)
 
             stage(indicator, onProgress, 0.85, "Recording the narration")
@@ -581,6 +622,9 @@ class ReelPipeline(private val project: Project) {
         private const val FIT_PASSES = 200
 
         private const val POLL_MS = 100L
+
+        /** Enough commit subjects to show the shape of the work without flooding the prompt. */
+        private const val MAX_RECAP_SUBJECTS = 40
 
         fun getInstance(project: Project): ReelPipeline = project.service()
     }
