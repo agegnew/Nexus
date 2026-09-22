@@ -1,6 +1,7 @@
 package com.example.yasinreel.render
 
 import com.example.MyToolWindowFactory
+import com.example.trust.TrustToolWindowFactory
 import com.example.yasinreel.deck.DeckToolWindowFactory
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.DumbAware
@@ -51,6 +52,13 @@ class NexusToolWindowFactory : ToolWindowFactory, DumbAware {
         runCatching { DeckToolWindowFactory().createToolWindowContent(project, toolWindow) }
             .onSuccess { nameLastTab(toolWindow, DECK_TAB) }
             .onFailure { logger.warn("Nexus could not build the $DECK_TAB tab", it) }
+
+        // Trust answers a different question from the other three: not what this code is or
+        // what it did, but which of it has never been executed. Same guard, so a fault here
+        // costs this tab and nothing else.
+        runCatching { TrustToolWindowFactory().createToolWindowContent(project, toolWindow) }
+            .onSuccess { nameLastTab(toolWindow, TRUST_TAB) }
+            .onFailure { logger.warn("Nexus could not build the $TRUST_TAB tab", it) }
     }
 
     /**
@@ -66,5 +74,6 @@ class NexusToolWindowFactory : ToolWindowFactory, DumbAware {
         const val VISUALIZER_TAB = "Map"
         const val REEL_TAB = "Reel"
         const val DECK_TAB = "Deck"
+        const val TRUST_TAB = "Trust"
     }
 }

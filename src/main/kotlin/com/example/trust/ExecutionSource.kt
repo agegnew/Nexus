@@ -52,6 +52,7 @@ class FixtureExecutionSource : ExecutionSource {
     private var cachedPath: String? = null
     private var cachedStamp: Long = -1
     private var cached: Map<String, FileTrust> = emptyMap()
+    private var cachedAutoEnable: Boolean = false
 
     override fun trustFor(project: Project, file: VirtualFile): FileTrust? {
         val base = project.basePath ?: return null
@@ -63,6 +64,19 @@ class FixtureExecutionSource : ExecutionSource {
     fun all(project: Project): Map<String, FileTrust> {
         val base = project.basePath ?: return emptyMap()
         return load(base)
+    }
+
+    /**
+     * Whether this project asked for the paint to start switched on.
+     *
+     * The global default stays off, because colouring code nobody asked to have coloured is how
+     * a feature gets uninstalled. But a project that carries a `.nexus/trust.json` has opted in
+     * by definition, so `"autoEnable": true` in that file is the project saying "yes, show me".
+     */
+    fun autoEnable(project: Project): Boolean {
+        val base = project.basePath ?: return false
+        load(base)
+        return cachedAutoEnable
     }
 
     private fun relativePath(base: String, file: VirtualFile): String? {
@@ -77,6 +91,7 @@ class FixtureExecutionSource : ExecutionSource {
         if (!fixture.isFile) {
             cachedPath = null
             cached = emptyMap()
+            cachedAutoEnable = false
             return emptyMap()
         }
 
@@ -91,6 +106,7 @@ class FixtureExecutionSource : ExecutionSource {
 
     private fun parse(fixture: File): Map<String, FileTrust> = try {
         val payload = gson.fromJson(fixture.readText(), FixturePayload::class.java)
+        cachedAutoEnable = payload?.autoEnable == true
         payload?.files.orEmpty()
             .mapNotNull { entry ->
                 val path = entry.path?.trim().orEmpty()
@@ -122,7 +138,7 @@ class FixtureExecutionSource : ExecutionSource {
         return LineRange(start, end)
     }
 
-    private data class FixturePayload(val files: List<FixtureFile>?)
+    private data class FixturePayload(val files: List<FixtureFile>?, val autoEnable: Boolean?)
 
     private data class FixtureFile(
         val path: String?,

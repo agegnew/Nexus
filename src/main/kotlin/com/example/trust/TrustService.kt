@@ -19,14 +19,27 @@ class TrustService(private val project: Project) {
     private val source: ExecutionSource = FixtureExecutionSource()
 
     @Volatile
-    var enabled: Boolean = false
-        private set
+    private var explicit: Boolean? = null
+
+    /**
+     * Off unless the project asked otherwise, and then whatever the user last chose.
+     *
+     * The first read consults the source: a project carrying a `.nexus/trust.json` with
+     * `"autoEnable": true` has opted in, so the paint is already on when its files are opened.
+     * Any toggle after that is the user's word and wins for the rest of the session.
+     */
+    val enabled: Boolean
+        get() = explicit ?: projectDefault()
 
     /** Returns the new state, so callers do not have to read it back. */
     fun toggle(): Boolean {
-        enabled = !enabled
-        return enabled
+        val next = !enabled
+        explicit = next
+        return next
     }
+
+    private fun projectDefault(): Boolean =
+        (source as? FixtureExecutionSource)?.autoEnable(project) ?: false
 
     val sourceLabel: String get() = source.label
 
