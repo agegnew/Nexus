@@ -1,0 +1,834 @@
+/*
+ * Palette is lifted from visualizer-ui/src/App.css so Reel reads as part of Nexus
+ * rather than as a bolted-on panel. At generate time these are overridden by the
+ * palette harvested from the target project, so the film wears its own colours.
+ */
+:root {
+  --surface-base: oklch(14% 0.01 185);
+  --surface-raised: oklch(18% 0.012 185);
+  --surface-node: oklch(21% 0.013 185);
+  --surface-hover: oklch(24% 0.015 185);
+  --border-subtle: oklch(31% 0.014 185);
+  --text-primary: oklch(93% 0.008 185);
+  --text-secondary: oklch(72% 0.018 185);
+  --text-muted: oklch(58% 0.015 185);
+  --accent: oklch(72% 0.12 185);
+  --accent-warm: oklch(81% 0.12 95);
+  --font-ui: "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+  --font-code: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-lg: 16px;
+  --space-xl: 24px;
+}
+
+* { box-sizing: border-box; }
+
+/*
+ * The UA rule for [hidden] is a bare attribute selector, so every class based
+ * display below would quietly outrank it and the picker would sit under the film.
+ */
+[hidden] { display: none !important; }
+
+body {
+  margin: 0;
+  background: var(--surface-base);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.reel { display: flex; flex-direction: column; min-height: 100vh; }
+
+.reel__head {
+  display: flex; align-items: baseline; gap: var(--space-sm);
+  padding: var(--space-md) var(--space-lg);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.reel__eyebrow {
+  text-transform: uppercase; letter-spacing: .08em; font-size: 10px;
+  color: var(--text-muted);
+}
+.reel__project { font-size: 13px; color: var(--text-secondary); font-weight: 600; }
+
+.picker {
+  padding: var(--space-xl) var(--space-lg);
+  display: grid;
+  gap: var(--space-lg);
+  container-type: inline-size;
+}
+.picker__lede { margin: 0; color: var(--text-secondary); max-width: 52ch; }
+.picker__foot { margin: 0; color: var(--text-muted); font-size: 12px; }
+
+/* Single column by default: an IntelliJ tool window is often very narrow. */
+.picker__cuts { display: grid; gap: var(--space-md); }
+@container (min-width: 620px) { .picker__cuts { grid-template-columns: 1fr 1fr; } }
+
+.cut {
+  display: grid; gap: 6px; text-align: left; cursor: pointer;
+  padding: var(--space-lg);
+  background: var(--surface-node);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  color: inherit; font: inherit;
+  transition: background .15s ease, border-color .15s ease;
+}
+.cut:hover { background: var(--surface-hover); border-color: var(--accent); }
+.cut:focus-visible { outline: 2px solid var(--accent-warm); outline-offset: 2px; }
+.cut[disabled] { opacity: .55; cursor: progress; }
+
+.cut__kind {
+  text-transform: uppercase; letter-spacing: .08em; font-size: 10px; color: var(--text-muted);
+}
+.cut__name { font-size: 15px; }
+.cut__blurb { color: var(--text-secondary); }
+.cut__state { font-family: var(--font-code); font-size: 11px; color: var(--text-muted); }
+.cut__state[data-state="working"] { color: var(--accent-warm); }
+.cut__state[data-state="ready"] { color: var(--accent); }
+
+.stage {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  padding: var(--space-lg);
+}
+
+/*
+ * The frame is only a viewport. Whatever shape it ends up, player.js centres a true
+ * 16:9 stage inside it, so an odd panel aspect produces letterbox bars rather than a
+ * distorted film.
+ */
+.stage__frame {
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  max-height: 100%;
+  margin: auto;
+  background: #000;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: .001ms !important; transition-duration: .001ms !important; }
+}
+
+/* ======================================================================== *
+ *  Transport
+ * ======================================================================== */
+
+.reel--playing { height: 100vh; }
+
+.transport { display: flex; flex-direction: column; gap: 6px; }
+.tp__row { display: flex; align-items: center; gap: var(--space-md); flex-wrap: wrap; }
+
+.tp__play {
+  flex: 0 0 30px; width: 30px; height: 30px;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-node);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background .15s ease, border-color .15s ease;
+}
+.tp__play:hover { background: var(--surface-hover); border-color: var(--accent); }
+.tp__play:focus-visible { outline: 2px solid var(--accent-warm); outline-offset: 2px; }
+
+.tp__glyph { position: relative; display: block; width: 12px; height: 12px; }
+.tp__play[data-mode="play"] .tp__glyph::before {
+  content: ''; position: absolute; left: 3px; top: 0;
+  border-left: 9px solid currentColor;
+  border-top: 6px solid transparent;
+  border-bottom: 6px solid transparent;
+}
+.tp__play[data-mode="pause"] .tp__glyph::before,
+.tp__play[data-mode="pause"] .tp__glyph::after {
+  content: ''; position: absolute; top: 0;
+  width: 3px; height: 12px; background: currentColor;
+}
+.tp__play[data-mode="pause"] .tp__glyph::before { left: 1px; }
+.tp__play[data-mode="pause"] .tp__glyph::after { right: 1px; }
+
+.tp__scrub { position: relative; flex: 1 1 140px; height: 22px; display: flex; align-items: center; }
+.tp__track {
+  position: absolute; left: 0; right: 0; top: 50%;
+  height: 4px; margin-top: -2px;
+  border-radius: 2px;
+  background: var(--surface-node);
+}
+.tp__fill { height: 100%; width: 0; border-radius: 2px; background: linear-gradient(90deg, var(--accent), var(--accent-warm)); }
+.tp__ticks { position: absolute; inset: 0; }
+.tp__tick {
+  position: absolute; top: -3px;
+  width: 2px; height: 10px; margin-left: -1px;
+  border-radius: 1px;
+  background: var(--border-subtle);
+}
+.tp__tick[data-active="true"] { background: var(--accent-warm); }
+
+/* The native range is kept as the only hit target, so keyboard seeking is free. */
+.tp__range {
+  position: relative; width: 100%; height: 22px; margin: 0;
+  appearance: none; -webkit-appearance: none;
+  background: transparent; cursor: pointer;
+}
+.tp__range::-webkit-slider-runnable-track { height: 22px; background: transparent; }
+.tp__range::-webkit-slider-thumb {
+  appearance: none; -webkit-appearance: none;
+  width: 12px; height: 12px; margin-top: 5px;
+  border-radius: 50%;
+  background: var(--text-primary);
+  border: 2px solid var(--surface-base);
+}
+.tp__range::-moz-range-track { height: 22px; background: transparent; border: 0; }
+.tp__range::-moz-range-thumb {
+  width: 12px; height: 12px; border-radius: 50%;
+  background: var(--text-primary); border: 2px solid var(--surface-base);
+}
+.tp__range:focus-visible { outline: 2px solid var(--accent-warm); outline-offset: 2px; border-radius: 4px; }
+
+.tp__time {
+  font-family: var(--font-code); font-size: 11px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.tp__chip {
+  font: inherit; font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-node);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background .15s ease, color .15s ease, border-color .15s ease;
+}
+.tp__chip:hover { background: var(--surface-hover); color: var(--text-primary); border-color: var(--accent); }
+.tp__chip:focus-visible { outline: 2px solid var(--accent-warm); outline-offset: 2px; }
+.tp__chip[aria-pressed="false"] { opacity: .5; }
+
+.tp__now { margin: 0; display: flex; gap: 8px; min-height: 15px; font-size: 11px; }
+.tp__chapter { color: var(--text-secondary); }
+.tp__note { color: var(--accent); }
+
+/*
+ * The same narration the film carries, repeated at real interface size. A 16:9 frame
+ * in a 400px tool window is simply too small to read type off, and this costs nothing
+ * because it lives outside the stage and never reaches a render.
+ */
+.tp__line { margin: 0; min-height: 15px; font-size: 12px; color: var(--text-primary); }
+
+/* ======================================================================== *
+ *  Stage: a fixed 1200x675 coordinate space, scaled to fit by player.js
+ *
+ *  Everything below is sized in absolute pixels against that space, because the
+ *  whole stage is scaled by one transform. The film is usually watched in an
+ *  IntelliJ tool window around 700px wide, which is a scale of about 0.58, so
+ *  nothing here goes under 17px: that is already 10px on the viewer's screen.
+ * ======================================================================== */
+
+.reel-stage {
+  /* Overridden per film from storyboard.theme.colors, which is why every accent
+     below is a token rather than a literal. */
+  --reel-accent: var(--accent);
+  --reel-accent-2: var(--accent-warm);
+  --reel-accent-3: var(--accent);
+  --reel-accent-4: var(--accent-warm);
+  --reel-bg: var(--surface-base);
+  --reel-panel: var(--surface-raised);
+  --reel-line: var(--border-subtle);
+  --reel-text: var(--text-primary);
+  --reel-dim: var(--text-secondary);
+  --reel-mute: var(--text-muted);
+
+  position: absolute; top: 0; left: 0;
+  transform-origin: 0 0;
+  overflow: hidden;
+  background: var(--reel-bg);
+  color: var(--reel-text);
+  font-family: var(--font-ui);
+  line-height: 1.4;
+}
+
+.reel-stage::before {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background:
+    radial-gradient(58% 58% at 10% 6%, color-mix(in oklab, var(--reel-accent) 18%, transparent), transparent 72%),
+    radial-gradient(52% 52% at 94% 98%, color-mix(in oklab, var(--reel-accent-2) 14%, transparent), transparent 72%);
+}
+
+/*
+ * Margins are tight on purpose. A 16:9 frame with a 76px gutter and a centred block
+ * reads as a slide deck; the film has to look like it was composed for the frame.
+ */
+.scene {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; gap: 16px;
+  padding: 32px 50px 34px;
+  /* Gated on the playhead by player.js: only the scene on screen is clickable. */
+  pointer-events: none;
+}
+
+/*
+ * Only a scene that actually carries narration gives up the bottom band for it. The
+ * band is three lines deep because narration is now written for the whole film rather
+ * than for the occasional title, and a third line landing over the content would be
+ * the same defect in a different place.
+ */
+.scene--cc { padding-bottom: 104px; }
+
+.scene__head { flex: 0 0 auto; display: flex; align-items: center; gap: 18px; }
+.scene__eyebrow {
+  font-size: 20px; text-transform: uppercase; letter-spacing: .16em;
+  color: var(--reel-accent); white-space: nowrap;
+  /* The bar is shared with the rule and any source chip, so the label gets most of it
+     and no more. Without the cap a heading written as a sentence pushed both off the
+     right edge of the stage. */
+  min-width: 0; max-width: 70%;
+  overflow: hidden; text-overflow: ellipsis;
+}
+/* Runs out to the right margin, so the top edge of the frame is never half empty. */
+.scene__rule, .ti__rule, .ou__rule {
+  display: block; height: 2px; border-radius: 1px;
+  background: linear-gradient(90deg, var(--reel-accent), var(--reel-accent-2), var(--reel-accent));
+  background-size: 200% 100%;
+}
+.scene__rule { flex: 1 1 auto; min-width: 48px; }
+
+.scene__body { flex: 1 1 auto; min-height: 0; display: flex; }
+.scene__body > * { flex: 1 1 auto; min-width: 0; min-height: 0; }
+
+/* The travelling highlight. Parked at opacity 0 by gsap, never by a CSS animation. */
+.glow {
+  position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  background: linear-gradient(115deg,
+    color-mix(in oklab, var(--reel-accent) 24%, transparent),
+    color-mix(in oklab, var(--reel-accent-2) 10%, transparent) 46%,
+    transparent 72%);
+  opacity: 0;
+}
+
+.scene__caption {
+  position: absolute; left: 50px; right: 50px; bottom: 24px;
+  margin: 0; text-align: center;
+  font-size: 20px; line-height: 1.3;
+  color: var(--reel-text);
+  text-wrap: balance;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, .55);
+  /* Three lines is the band the layout above reserved. A longer line of narration is
+     still spoken in full and still printed in full under the transport. */
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.reel-stage--nocc .scene__caption { display: none; }
+
+.scene__refs {
+  position: absolute; top: 26px; right: 50px;
+  display: flex; flex-direction: column; align-items: flex-end; gap: 2px;
+}
+/* Inside the header bar it is a row at the end of the rule, not a layer over it. */
+.scene__head .scene__refs { position: static; flex: 0 0 auto; flex-direction: row; gap: 14px; }
+.scene__refs .srcref { font-size: 16px; color: var(--reel-mute); }
+.scene__refs .srcref:hover { color: var(--reel-accent); }
+
+/* Click to source. Dotted by default so it reads as openable without a hover. */
+.srcref {
+  display: inline-block;
+  max-width: 100%;
+  /* Paths are unbroken tokens, and in a five column trace they are wider than the
+     column they belong to. */
+  overflow-wrap: anywhere;
+  font-family: var(--font-code); font-size: 16px;
+  padding: 1px 0; border: 0; background: none;
+  color: var(--reel-accent);
+  cursor: pointer;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+  transition: color .15s ease, text-decoration-color .15s ease;
+}
+.srcref:hover { color: var(--reel-accent-2); text-decoration: underline solid; }
+.srcref:focus-visible { outline: 2px solid var(--reel-accent-2); outline-offset: 2px; border-radius: 3px; }
+
+.w { display: inline-block; margin-right: .26em; }
+.w--mask { overflow: hidden; vertical-align: top; padding-bottom: .12em; margin-bottom: -.12em; }
+.w__in { display: inline-block; }
+
+/* ---------------------------------------------------------------- title */
+
+.ti__block {
+  display: flex; flex-direction: column; gap: 18px;
+  width: 100%; height: 100%;
+  transform-origin: 50% 50%;
+}
+.ti__top { display: flex; align-items: center; gap: 14px; }
+.ti__mark { display: grid; place-items: center; width: 26px; height: 26px; }
+.ti__ring, .ou__ring {
+  grid-area: 1 / 1; width: 100%; height: 100%; border-radius: 50%;
+  border: 2px solid var(--reel-accent);
+}
+.ti__core, .ou__core {
+  grid-area: 1 / 1; border-radius: 50%; background: var(--reel-accent);
+  width: 34%; height: 34%;
+}
+.ti__kicker {
+  font-size: 20px; text-transform: uppercase; letter-spacing: .16em;
+  color: var(--reel-accent);
+}
+.ti__mid { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; justify-content: center; gap: 22px; }
+.ti__name {
+  margin: 0;
+  /* Room for the .12em the word masks hang below the last line, which the clamp's own
+     overflow would otherwise shave off the descenders. */
+  padding-bottom: .14em; margin-bottom: -.14em;
+  font-size: 92px; font-weight: 700; line-height: 1.03; letter-spacing: -.025em;
+  word-break: break-word;
+  /* A product name can arrive as one unbroken 90 character token. */
+  overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+.ti__rule { width: 100%; height: 3px; }
+.ti__tagline {
+  margin: 0; max-width: 1000px; font-size: 29px; line-height: 1.3; color: var(--reel-dim);
+  overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4;
+  overflow: hidden;
+}
+.ti__foot {
+  flex: 0 0 auto;
+  display: flex; align-items: baseline; justify-content: space-between; gap: 24px;
+  padding-top: 14px;
+  border-top: 1px solid var(--reel-line);
+}
+/* No repo and no source ref means no rule either, rather than a stripe of nothing. */
+.ti__foot:empty { display: none; }
+.ti__repo {
+  min-width: 0; font-family: var(--font-code); font-size: 18px; color: var(--reel-mute);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* -------------------------------------------------------- big-statement */
+
+.bs__block { display: flex; flex-direction: column; gap: 20px; width: 100%; height: 100%; transform-origin: 50% 50%; }
+.bs__mid { flex: 1 1 auto; min-height: 0; display: flex; align-items: stretch; gap: 30px; }
+.bs__bar {
+  flex: 0 0 5px; border-radius: 3px;
+  background: linear-gradient(180deg, var(--reel-accent), var(--reel-accent-2), var(--reel-accent));
+  background-size: 100% 200%;
+}
+.bs__text {
+  margin: 0; align-self: center; max-width: 1040px;
+  padding-bottom: .14em; margin-bottom: -.14em;
+  font-size: 64px; font-weight: 600; line-height: 1.1; letter-spacing: -.02em;
+  overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 8;
+  overflow: hidden;
+}
+.bs__foot {
+  flex: 0 0 auto;
+  display: flex; align-items: baseline; justify-content: space-between; gap: 28px;
+  padding-top: 18px;
+  border-top: 1px solid var(--reel-line);
+}
+.bs__foot:empty { display: none; }
+.bs__context {
+  margin: 0; max-width: 880px; font-size: 22px; line-height: 1.4; color: var(--reel-dim);
+  overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+
+/* ------------------------------------------------------------ stat-grid */
+
+.sg__grid { display: grid; gap: 16px; grid-auto-rows: 1fr; width: 100%; height: 100%; }
+.sg__cell {
+  position: relative; overflow: hidden;
+  display: flex; flex-direction: column; justify-content: center; gap: 8px;
+  padding: 20px 24px;
+  background: var(--reel-panel);
+  border: 1px solid var(--reel-line);
+  border-radius: 14px;
+}
+.sg__bar {
+  position: absolute; left: 0; top: 0; width: 100%; height: 3px;
+  background: linear-gradient(90deg, var(--reel-accent), var(--reel-accent-2));
+}
+.sg__value {
+  min-width: 0;
+  /* 1.1 rather than 1: an overshooting glyph at 132px would otherwise be shaved by the
+     clamp's own overflow. */
+  font-size: 76px; font-weight: 700; line-height: 1.1; letter-spacing: -.03em;
+  /* Without tabular figures the number jitters sideways while it counts. */
+  font-variant-numeric: tabular-nums;
+  /*
+   * The last net under the fit pass in scenes.js. A value longer than the card can hold
+   * wraps once and then ends in an ellipsis, which reads as a sentence that was cut
+   * short rather than as a card with its top and bottom sliced off.
+   */
+  overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+/* A sentence is not a measurement, so it stops being typeset as one. */
+.sg__value--prose {
+  font-weight: 600; line-height: 1.26; letter-spacing: 0;
+  font-variant-numeric: normal;
+  -webkit-line-clamp: 4;
+}
+.sg__meta { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.sg__label {
+  font-size: 20px; line-height: 1.25; color: var(--reel-dim);
+  overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+/*
+ * Two or three numbers means wide tiles, and a wide tile with the label stacked under
+ * the digits is mostly empty. Beside them, the number and what it counts read as one
+ * line and the tile is full.
+ */
+.sg__grid[data-cols="1"] .sg__cell,
+.sg__grid[data-cols="2"] .sg__cell { flex-direction: row; align-items: center; gap: 24px; }
+.sg__grid[data-cols="1"] .sg__meta,
+.sg__grid[data-cols="2"] .sg__meta { flex: 1 1 auto; }
+.sg__grid[data-cols="1"] .sg__label,
+.sg__grid[data-cols="2"] .sg__label { font-size: 24px; }
+
+/*
+ * Prose beside its label in a two column tile leaves neither enough width to be read.
+ * One sentence anywhere in the set puts every tile back into a column, so the scene
+ * still reads as one grid rather than as two.
+ */
+.sg__grid[data-shape="text"] .sg__cell {
+  flex-direction: column; align-items: stretch; justify-content: center; gap: 12px;
+}
+.sg__grid[data-shape="text"] .sg__meta { flex: 0 0 auto; }
+.sg__grid[data-shape="text"] .sg__label { font-size: 20px; }
+
+/* ----------------------------------------------------- capability-cards */
+
+.cc__row { display: grid; gap: 16px; grid-auto-rows: 1fr; width: 100%; height: 100%; }
+.cc__card {
+  position: relative; overflow: hidden;
+  display: flex; flex-direction: column; gap: 10px;
+  padding: 22px 22px 20px;
+  background: var(--reel-panel);
+  border: 1px solid var(--reel-line);
+  border-radius: 14px;
+}
+.cc__bar { position: absolute; left: 0; top: 0; width: 100%; height: 3px; background: var(--reel-accent); }
+.cc__top { display: flex; align-items: baseline; gap: 12px; }
+.cc__index {
+  flex: 0 0 auto;
+  font-family: var(--font-code); font-size: 17px; letter-spacing: .04em;
+  color: var(--reel-accent);
+}
+.cc__title {
+  margin: 0; min-width: 0; font-size: 27px; font-weight: 600; line-height: 1.15;
+  overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+.cc__body {
+  margin: 0; min-width: 0; font-size: 20px; line-height: 1.4; color: var(--reel-dim);
+  overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 7;
+  overflow: hidden;
+}
+/*
+ * The copy sits in the middle of the card whether or not there is a path, and the path
+ * is pinned out of the flow at the bottom edge. Without that, a tall card puts its
+ * title against the top rule and leaves a third of itself empty.
+ */
+.cc__card { justify-content: center; }
+.cc__card:has(.srcref) { padding-bottom: 48px; }
+.cc__card .srcref { position: absolute; left: 22px; right: 22px; bottom: 18px; text-align: left; }
+
+/* ----------------------------------------------------------- arch-layers */
+
+.al__stack { display: flex; flex-direction: column; gap: 12px; width: 100%; height: 100%; }
+.al__layer {
+  position: relative; overflow: hidden;
+  flex: 1 1 0; min-height: 0;
+  display: flex; align-items: center; gap: 24px;
+  padding: 12px 20px;
+  background: var(--reel-panel);
+  border: 1px solid var(--reel-line);
+  border-left: 3px solid var(--reel-accent);
+  border-radius: 12px;
+}
+.al__head { display: flex; align-items: center; gap: 12px; flex: 0 0 236px; }
+.al__index {
+  width: 28px; height: 28px; flex: 0 0 28px;
+  display: grid; place-items: center;
+  border-radius: 8px;
+  font-size: 16px; font-weight: 700;
+  color: var(--reel-accent);
+  background: color-mix(in oklab, var(--reel-accent) 18%, transparent);
+}
+.al__name {
+  min-width: 0; font-size: 24px; font-weight: 600; line-height: 1.15;
+  overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+.al__parts { flex: 1 1 auto; display: flex; flex-wrap: wrap; align-content: center; gap: 8px; }
+.al__part {
+  display: inline-flex; align-items: baseline; gap: 8px;
+  max-width: 100%;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: var(--surface-node);
+  border: 1px solid var(--reel-line);
+  font-size: 18px;
+}
+.al__part-name { overflow-wrap: anywhere; }
+/* Relative, so the fit pass resizing the pill takes the tech label with it. */
+.al__part-tech { font-style: normal; font-family: var(--font-code); font-size: .84em; color: var(--reel-mute); }
+/* Fewer layers means taller bands, and a tall band with small type inside reads as
+   empty. */
+.al__stack[data-count="2"] .al__name, .al__stack[data-count="3"] .al__name { font-size: 28px; }
+.al__stack[data-count="2"] .al__part, .al__stack[data-count="3"] .al__part { font-size: 20px; padding: 8px 16px; }
+.al__stack[data-count="2"] .al__index, .al__stack[data-count="3"] .al__index {
+  width: 32px; height: 32px; flex-basis: 32px; font-size: 18px;
+}
+.al__stack[data-count="4"] .al__name, .al__stack[data-count="5"] .al__name { font-size: 21px; }
+.al__stack[data-count="4"] .al__part, .al__stack[data-count="5"] .al__part { font-size: 17px; padding: 5px 12px; }
+.al__stack[data-count="4"] .al__head, .al__stack[data-count="5"] .al__head { flex-basis: 210px; }
+/* Six bands leave about 80px each, which is one row of pills and nothing spare. */
+.al__stack[data-count="6"] { gap: 10px; }
+/* Two wrapped rows of pills at the smallest size need every pixel of the band. */
+.al__stack[data-count="6"] .al__layer { padding: 6px 14px; gap: 14px; }
+.al__stack[data-count="6"] .al__name { font-size: 19px; }
+.al__stack[data-count="6"] .al__part { font-size: 15px; padding: 4px 10px; }
+.al__stack[data-count="6"] .al__parts { gap: 5px; }
+.al__stack[data-count="6"] .al__head { flex-basis: 190px; }
+.al__stack[data-count="6"] .al__index { width: 24px; height: 24px; flex-basis: 24px; font-size: 14px; }
+
+/* ----------------------------------------------------------- flow-trace */
+
+.ft__track { position: relative; width: 100%; height: 100%; }
+.ft__rail { position: absolute; inset: 0; }
+.ft__wire {
+  position: absolute; top: calc(50% - 1px); height: 2px;
+  background: linear-gradient(90deg, var(--reel-accent), var(--reel-accent-2));
+}
+.ft__node {
+  position: absolute; top: 0; height: 100%;
+  display: flex; flex-direction: column; align-items: center;
+  padding: 0 8px; text-align: center;
+}
+/* Half the track each, so the mark always lands exactly on the rail. */
+.ft__slot { flex: 1 1 0; min-height: 0; display: flex; width: 100%; }
+.ft__slot--up { padding-bottom: 10px; }
+.ft__slot--down { padding-top: 10px; }
+.ft__mark { flex: 0 0 auto; display: grid; place-items: center; width: 44px; height: 44px; }
+.ft__halo { grid-area: 1 / 1; width: 40px; height: 40px; border-radius: 50%; border: 2px solid var(--reel-accent-2); }
+.ft__dot {
+  grid-area: 1 / 1; width: 14px; height: 14px; border-radius: 50%;
+  background: var(--reel-accent);
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--reel-accent) 22%, transparent);
+}
+.ft__packet {
+  position: absolute; top: 50%; left: 0;
+  width: 12px; height: 12px; border-radius: 50%;
+  background: var(--reel-accent-2);
+  box-shadow: 0 0 18px 2px var(--reel-accent-2);
+}
+/* A card rather than loose type: five of them fill the frame the way five labels
+   floating under a wire never did. */
+.ft__body {
+  flex: 1 1 auto; width: 100%; min-height: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  padding: 14px 12px;
+  background: var(--reel-panel);
+  border: 1px solid var(--reel-line);
+  border-radius: 12px;
+}
+.ft__body { overflow: hidden; }
+.ft__label {
+  max-width: 100%; font-size: 21px; font-weight: 600; line-height: 1.2;
+  word-break: break-word; overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4;
+  overflow: hidden;
+}
+.ft__detail {
+  max-width: 100%; font-size: 17px; color: var(--reel-dim); line-height: 1.3;
+  overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+.ft__body .srcref { font-size: 15px; }
+.ft__track[data-count="6"] .ft__detail { font-size: 15px; }
+.ft__track[data-count="6"] .ft__body { padding: 12px 8px; }
+
+/* -------------------------------------------------------------- journey */
+
+.jr__track { position: relative; width: 100%; height: 100%; }
+.jr__spine {
+  position: absolute; left: 23px; top: 0; width: 2px; height: 100%;
+  background: linear-gradient(180deg,
+    transparent 0%, var(--reel-accent) 7%, var(--reel-accent-2) 93%, transparent 100%);
+}
+/* The one thing on screen that is always moving in this template. */
+.jr__pip {
+  position: absolute; left: 24px; top: 0;
+  width: 12px; height: 12px; border-radius: 50%;
+  background: var(--reel-accent-2);
+  box-shadow: 0 0 16px 2px var(--reel-accent-2);
+}
+.jr__stack { position: relative; display: flex; flex-direction: column; height: 100%; }
+/* Each step owns an equal share of the track, and keeps to it. */
+.jr__step { flex: 1 1 0; min-height: 0; overflow: hidden; display: flex; align-items: center; gap: 22px; }
+.jr__badge {
+  flex: 0 0 46px; width: 46px; height: 46px;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  border: 2px solid var(--reel-accent);
+  background: var(--reel-bg);
+  font-size: 20px; font-weight: 700;
+}
+.jr__body { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.jr__actor {
+  font-size: 17px; text-transform: uppercase; letter-spacing: .14em;
+  color: var(--reel-accent-2);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.jr__action {
+  font-size: 30px; line-height: 1.24; max-width: 980px;
+  overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+/* Seven or eight beats leave about 70px a step, so the badge and the gaps give way. */
+.jr__track[data-count="7"] .jr__badge,
+.jr__track[data-count="8"] .jr__badge { flex-basis: 38px; width: 38px; height: 38px; font-size: 17px; }
+.jr__track[data-count="7"] .jr__step,
+.jr__track[data-count="8"] .jr__step { gap: 16px; }
+.jr__track[data-count="7"] .jr__actor,
+.jr__track[data-count="8"] .jr__actor { font-size: 15px; letter-spacing: .1em; }
+.jr__track[data-count="7"] .jr__action,
+.jr__track[data-count="8"] .jr__action { -webkit-line-clamp: 2; }
+
+/* ---------------------------------------------------------------- outro */
+
+.ou__block { display: flex; flex-direction: column; gap: 18px; width: 100%; height: 100%; transform-origin: 50% 50%; }
+.ou__mid {
+  flex: 1 1 auto; min-height: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px;
+  text-align: center;
+}
+.ou__mark { display: grid; place-items: center; width: 60px; height: 60px; }
+.ou__cta {
+  margin: 0; max-width: 1000px;
+  padding-bottom: .14em; margin-bottom: -.14em;
+  font-size: 62px; font-weight: 700; line-height: 1.08; letter-spacing: -.02em;
+  overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 5;
+  overflow: hidden;
+}
+.ou__rule { width: 260px; height: 3px; }
+.ou__foot {
+  flex: 0 0 auto;
+  display: flex; align-items: baseline; justify-content: space-between; gap: 24px;
+  padding-top: 14px;
+  border-top: 1px solid var(--reel-line);
+}
+.ou__repo {
+  min-width: 0; font-family: var(--font-code); font-size: 19px; color: var(--reel-accent);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ou__stamp {
+  min-width: 0; font-size: 17px; color: var(--reel-mute);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.cut__state[data-state="failed"] { color: oklch(68% 0.16 25); }
+.picker__foot[data-tone="error"] { color: oklch(68% 0.16 25); }
+
+/* --------------------------------------------------------------- notice */
+
+/*
+ * The honesty banner. Opaque, not translucent: it sits over the stage while a film is
+ * playing, and a see-through bar over moving picture is unreadable exactly when the
+ * viewer needs to read it. It never auto-dismisses, only the button closes it.
+ */
+.notice {
+  position: sticky; top: 0; z-index: 20;
+  display: flex; align-items: flex-start; gap: var(--space-md);
+  padding: 10px var(--space-lg);
+  border-bottom: 1px solid oklch(62% 0.14 85);
+  font-size: 12px; line-height: 1.45;
+}
+.notice[data-tone="warn"] { background: oklch(84% 0.13 88); color: oklch(24% 0.05 88); }
+.notice[data-tone="ok"] {
+  background: var(--surface-raised); color: var(--text-secondary);
+  border-bottom-color: var(--border-subtle);
+}
+.notice__text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.notice__head { font-weight: 700; }
+.notice__body, .notice__fix { font-weight: 400; }
+.notice__fix { opacity: .85; }
+.notice__close {
+  flex: 0 0 auto;
+  border: 1px solid currentColor; border-radius: 4px;
+  padding: 3px 8px;
+  background: transparent; color: inherit;
+  font: inherit; font-size: 11px; cursor: pointer;
+  opacity: .75;
+}
+.notice__close:hover { opacity: 1; }
+.notice__close:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+
+/* --------------------------------------------------------------- export */
+
+.tp__export { position: relative; }
+
+/*
+ * Opens upward. The transport is the last row on the page, so a menu dropping down
+ * would be off screen in a short tool window.
+ */
+.tp__menu {
+  position: absolute; right: 0; bottom: calc(100% + 6px); z-index: 30;
+  min-width: 232px;
+  display: flex; flex-direction: column;
+  padding: 4px;
+  background: var(--surface-node);
+  border: 1px solid var(--border-subtle); border-radius: 6px;
+  box-shadow: 0 10px 28px oklch(0% 0 0 / .45);
+}
+.tp__menu button {
+  display: flex; flex-direction: column; gap: 1px;
+  padding: 7px 9px;
+  border: 0; border-radius: 4px;
+  background: transparent; color: var(--text-primary);
+  font: inherit; font-size: 12px; text-align: left; cursor: pointer;
+}
+.tp__menu button small { font-size: 10px; color: var(--text-muted); }
+.tp__menu button:hover:not(:disabled) { background: var(--surface-hover); }
+.tp__menu button:focus-visible { outline: 2px solid var(--accent-warm); outline-offset: -2px; }
+.tp__menu button:disabled { cursor: not-allowed; color: var(--text-muted); }
+
+/* Offered only after an export, so the finished file is one click away instead of a
+   path the reader has to copy out of a status line. */
+.tp__reveal {
+  margin-left: 8px;
+  padding: 3px 10px;
+  font: inherit;
+  font-size: 11px;
+  color: var(--text-primary, #E4EDEA);
+  background: var(--surface-hover, #1d2a28);
+  border: 1px solid var(--border-subtle, #2b3a37);
+  border-radius: 999px;
+  cursor: pointer;
+}
+.tp__reveal:hover { border-color: var(--accent, #48C6BD); }
+.tp__reveal:focus-visible { outline: 2px solid var(--accent-warm, #E2B65C); outline-offset: 2px; }

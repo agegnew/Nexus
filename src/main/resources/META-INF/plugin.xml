@@ -17,11 +17,18 @@
 
     <extensions defaultExtensionNs="com.intellij">
 
+        <!-- One window, one button on the stripe, a tab per view inside. The factory
+             delegates to MyToolWindowFactory for the Map tab, so that file stays owned
+             by the rest of the team and is not edited by this work. -->
         <toolWindow
-                id="Code Visualizer"
+                id="Nexus"
                 anchor="right"
-                factoryClass="com.example.MyToolWindowFactory"
+                factoryClass="com.example.yasinreel.render.NexusToolWindowFactory"
                 icon="AllIcons.Toolwindows.ToolWindowPalette"/>
+
+        <!-- Export balloons. ReelExporter builds a Notification directly when this is
+             missing, but then the user cannot turn them down in Settings. -->
+        <notificationGroup id="Nexus Reel" displayType="BALLOON"/>
 
     </extensions>
 

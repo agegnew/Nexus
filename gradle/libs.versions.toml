@@ -1,5 +1,12 @@
 [versions]
 junit = "4.13.2"
+# Yasin / Nexus Reel
+gson = "2.11.0"
+okhttp = "4.12.0"
 
 [libraries]
 junit = { module = "junit:junit", version.ref = "junit" }
+# Yasin / Nexus Reel. Gson was previously an undeclared IntelliJ platform
+# transitive; declaring it explicitly because JetBrains has been removing it.
+gson = { module = "com.google.code.gson:gson", version.ref = "gson" }
+okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }
