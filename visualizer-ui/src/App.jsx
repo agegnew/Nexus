@@ -14,6 +14,9 @@ import { DEMO_FIXTURES, demoGraph, demoIdFromParams } from './demo'
 
 const ArchitectureDiagram = lazy(() => import('./ArchitectureDiagram'))
 const ActivityView = lazy(() => import('./views/ActivityView'))
+const SwarmView = lazy(() => import('./views/SwarmView'))
+
+const VIEWS = ['code', 'architecture', 'activity', 'swarm']
 
 const ROOT_ID = 'project-root'
 const HORIZONTAL_GAP = 300
@@ -259,7 +262,7 @@ export default function App() {
   ))
   const [expandedIds, setExpandedIds] = useState(() => new Set([ROOT_ID]))
   const [flowInstance, setFlowInstance] = useState(null)
-  const [activeView, setActiveView] = useState('code')
+  const [activeView, setActiveView] = useState(() => (VIEWS.includes(projectParams.get('view')) ? projectParams.get('view') : 'code'))
   const [activityMeta, setActivityMeta] = useState(() => window.__CODE_VISUALIZER_ACTIVITY_META__ ?? null)
 
   useEffect(() => {
@@ -362,6 +365,14 @@ export default function App() {
         >
           Activity
         </button>
+        <button
+          type="button"
+          className={activeView === 'swarm' ? 'view-switcher__active' : ''}
+          aria-pressed={activeView === 'swarm'}
+          onClick={() => setActiveView('swarm')}
+        >
+          Swarm
+        </button>
 
         {demoId && (
           <div className="demo-picker" role="group" aria-label="Demo data set">
@@ -388,6 +399,16 @@ export default function App() {
           </section>
         )}>
           <ActivityView meta={activityMeta} embedded={Boolean(window.__CODE_VISUALIZER_HOST__)} />
+        </Suspense>
+      )}
+
+      {activeView === 'swarm' && (
+        <Suspense fallback={(
+          <section className="activity-workspace">
+            <div className="activity"><div className="activity__state" role="status"><strong>Loading</strong></div></div>
+          </section>
+        )}>
+          <SwarmView analysis={analysis} />
         </Suspense>
       )}
 

@@ -71,3 +71,25 @@ val copyVisualizerUi by tasks.registering(Sync::class) {
 }
 
 tasks.named("processResources") { dependsOn(copyVisualizerUi) }
+
+// Nexus Swarm. The runner is a Node program in swarm/, started by the plugin at run time. The
+// jar records where this checkout keeps it, so the sandbox IDE finds it without configuration.
+// NEXUS_SWARM_DIR overrides this, and a swarm/ folder in the opened project is also found.
+val swarmDirPath = layout.projectDirectory.dir("swarm").asFile.absolutePath.replace('\\', '/')
+val swarmLocationDir = layout.buildDirectory.dir("generated/nexus-swarm")
+
+val writeSwarmLocation by tasks.registering {
+    val target = swarmLocationDir.map { it.file("nexus-swarm.properties") }
+    val location = swarmDirPath
+    inputs.property("swarmDir", location)
+    outputs.file(target)
+    doLast {
+        target.get().asFile.apply {
+            parentFile.mkdirs()
+            writeText("swarmDir=$location\n")
+        }
+    }
+}
+
+sourceSets.named("main") { resources.srcDir(swarmLocationDir) }
+tasks.named("processResources") { dependsOn(writeSwarmLocation) }

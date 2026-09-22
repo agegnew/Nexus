@@ -1,0 +1,15 @@
+{
+  "name": "nexus-swarm",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Five AI agents test a running web app in parallel and write a short report.",
+  "type": "module",
+  "scripts": {
+    "serve": "node run.mjs serve",
+    "demo": "node run.mjs once --target http://localhost:5174 --graph ../visualizer-ui/src/demo/harbor.ready.json --verbose",
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "playwright": "1.63.0"
+  }
+}
