@@ -48,6 +48,36 @@ object SwarmLaunch {
     fun hasDependencies(dir: File): Boolean = File(dir, "node_modules/playwright").isDirectory
 
     /**
+     * Playwright's browsers are a second install, and forgetting it fails much later and far
+     * less clearly than forgetting the first.
+     *
+     * `npm install` puts the library in node_modules; the browser binaries come from a separate
+     * `npx playwright install chromium` into a shared cache outside the project. With the
+     * library present and the browser missing, the runner starts, the tab connects, the agents
+     * say "Waiting for a mission", and the run fails with Playwright's own message about an
+     * executable that does not exist, printed twice into the report. That message does name the
+     * fix, but only after a person has pressed the button and waited.
+     *
+     * Reported false only when none of the known caches holds a chromium at all. Anything
+     * unexpected counts as present, because blocking a working setup is the worse mistake.
+     */
+    fun hasBrowser(env: Map<String, String> = System.getenv(), home: String = System.getProperty("user.home")): Boolean {
+        val caches = listOfNotNull(
+            env["PLAYWRIGHT_BROWSERS_PATH"]?.takeIf { it.isNotBlank() },
+            "$home/Library/Caches/ms-playwright",
+            "$home/.cache/ms-playwright",
+            "$home/AppData/Local/ms-playwright",
+        ).map(::File)
+        // "0" means Playwright was told to keep browsers inside node_modules, so this cannot say.
+        if (env["PLAYWRIGHT_BROWSERS_PATH"] == "0") return true
+        val looked = caches.filter { it.isDirectory }
+        if (looked.isEmpty()) return false
+        return looked.any { cache ->
+            cache.listFiles()?.any { it.isDirectory && it.name.startsWith("chromium") } ?: true
+        }
+    }
+
+    /**
      * Where to look, most deliberate first: an explicit override, the checkout this plugin was
      * built from, then `swarm/` in the open project or any of its parents (the demo app lives
      * two folders below the repository root, so the parents matter).
@@ -85,6 +115,9 @@ class SwarmService(private val project: Project) : Disposable {
         ) ?: error("Could not find the swarm/ folder. Set $DIR_ENV to its path.")
         if (!SwarmLaunch.hasDependencies(dir)) {
             error("The swarm runner needs its packages. Run `npm install` in ${dir.path} once.")
+        }
+        if (!SwarmLaunch.hasBrowser()) {
+            error("The swarm runner needs a browser. Run `npx playwright install chromium` in ${dir.path} once.")
         }
         val node = findNode() ?: error("The swarm runner needs Node.js 18 or newer, which is not on PATH.")
         val outDir = File(project.basePath ?: dir.path, ".idea/nexus-swarm")

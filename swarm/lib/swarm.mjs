@@ -30,10 +30,36 @@ function windowSlot(index, { width = 640, height = 500, gap = 12 } = {}) {
   return { x: unscale(column * width), y: unscale(row * (height + gap)), width: unscale(width), height: unscale(height) }
 }
 
+/**
+ * Opens a browser, falling back to the one already on the machine.
+ *
+ * Playwright downloads its own Chromium and does not have a build for every OS it otherwise
+ * runs on: on macOS 12 `npx playwright install chromium` exits saying so, and every run then
+ * dies with "Executable doesn't exist at .../chrome-headless-shell". Chrome is on that machine
+ * already, and `channel: 'chrome'` drives it, so the fallback costs nothing and is the
+ * difference between the feature working and not existing there.
+ *
+ * The bundled build is still tried first: it is the version this was tested against, and a
+ * machine that has it should use it.
+ */
+async function openBrowser(options) {
+  try {
+    return await chromium.launch(options)
+  } catch (error) {
+    if (!/Executable doesn't exist|please run the following command/i.test(String(error?.message))) throw error
+    for (const channel of ['chrome', 'msedge']) {
+      try {
+        return await chromium.launch({ ...options, channel })
+      } catch { /* try the next one, then report the original problem */ }
+    }
+    throw error
+  }
+}
+
 async function launch(headed, index) {
-  if (!headed) return chromium.launch({ headless: true })
+  if (!headed) return openBrowser({ headless: true })
   const slot = windowSlot(index)
-  return chromium.launch({
+  return openBrowser({
     headless: false,
     args: [`--window-position=${slot.x},${slot.y}`, `--window-size=${slot.width},${slot.height}`, `--force-device-scale-factor=${WINDOW_SCALE}`],
   })
@@ -169,7 +195,7 @@ export async function runSwarm({ target, graph = null, headed = false, plan = 'a
     const account = createAccount(credentials ?? {}, startedAt)
     emit({ type: 'run', phase: 'scouting', message: `Reading the project and looking around ${target}`, project: contextSummary(context) })
 
-    const scoutBrowser = await chromium.launch({ headless: true })
+    const scoutBrowser = await openBrowser({ headless: true })
     const home = await scout(scoutBrowser, target, context.routes).finally(() => scoutBrowser.close().catch(() => {}))
     if (!home.ok) {
       const message = `Could not open ${target}. Is the app running? (${home.error})`

@@ -57,12 +57,30 @@ class ReelServer : Disposable {
      * over the narration directory above. Held weakly because this server outlives any project,
      * and a strong reference here would keep a closed one alive for the life of the IDE.
      */
-    @Volatile
-    private var trustProject: java.lang.ref.WeakReference<Project>? = null
+    private val trustProjects = java.util.concurrent.ConcurrentHashMap<String, java.lang.ref.WeakReference<Project>>()
 
-    /** Called by the tool window when it opens, so `/trust.json` has something to answer about. */
+    /** Called by the tool window when it opens, so the trust routes have something to answer about. */
     fun serveTrustFor(project: Project) {
-        trustProject = java.lang.ref.WeakReference(project)
+        val base = project.basePath ?: return
+        trustProjects[base] = java.lang.ref.WeakReference(project)
+    }
+
+    /**
+     * The project a trust request is about.
+     *
+     * Keyed by path rather than being one field, because a second open project used to overwrite
+     * the first: both panels then answered about whichever window opened last, and the button in
+     * one of them would have started a build in the other. The panel knows its own path, the map
+     * page put it in the frame's URL, so the request can simply say which project it means.
+     *
+     * With no path given, the single registered project is used, which is the ordinary case and
+     * keeps a page served outside the IDE working.
+     */
+    private fun trustProjectFor(path: String?): Project? {
+        trustProjects.entries.removeIf { it.value.get()?.isDisposed != false }
+        val wanted = path?.takeIf { it.isNotBlank() }
+        val found = if (wanted != null) trustProjects[wanted]?.get() else trustProjects.values.singleOrNull()?.get()
+        return found?.takeIf { !it.isDisposed }
     }
 
     /** Called by the tool window alongside [baseUrl], so `tts/<hash>.mp3` resolves. */
@@ -167,11 +185,23 @@ class ReelServer : Disposable {
         http.createContext("/" + DECK_PREFIX) { exchange -> serve(exchange, DECK_ROOT, DECK_PREFIX + "/") }
         // One copy of the code both tabs share, reachable from both by absolute path.
         http.createContext("/" + SHARED_PREFIX) { exchange -> serve(exchange, SHARED_ROOT, SHARED_PREFIX + "/") }
-        // Registered before the static prefix would swallow them: the longest match wins, so
-        // `/trust/model.json` has to be its own context or `/trust` would look for a file.
-        http.createContext("/" + TRUST_PREFIX + "/model.json") { exchange -> trustModel(exchange) }
-        http.createContext("/" + TRUST_PREFIX + "/run") { exchange -> trustRun(exchange) }
-        http.createContext("/" + TRUST_PREFIX + "/paint") { exchange -> trustPaint(exchange) }
+        /*
+         * The trust panel's data lives under its own prefix, NOT under the one its files are
+         * served from, and that separation is load bearing.
+         *
+         * com.sun.net.httpserver picks a context by plain string prefix, longest first. These
+         * were `/trust/run` and `/trust/model.json` beside a static `/trust`, and `/trust/run`
+         * is a prefix of `/trust/runtime/trust.js`. So the panel's only script was answered by
+         * the run-coverage handler: the page shipped with no JavaScript at all, every control
+         * on it was dead, and loading the panel started a coverage build on the open project.
+         * Two things went wrong at once and each hid the other.
+         *
+         * A separate prefix cannot collide with a file name whatever anyone adds later, which
+         * a cleverer rule inside the static handler could not promise.
+         */
+        http.createContext("/" + TRUST_API + "/model.json") { exchange -> trustModel(exchange) }
+        http.createContext("/" + TRUST_API + "/run") { exchange -> trustRun(exchange) }
+        http.createContext("/" + TRUST_API + "/paint") { exchange -> trustPaint(exchange) }
         http.createContext("/" + TRUST_PREFIX) { exchange -> serve(exchange, TRUST_ROOT, TRUST_PREFIX + "/") }
         // How a page that was served by Vite finds the plugin. Same origin when we serve
         // the Map ourselves, and proxied by vite.config.js when the dev server is running.
@@ -186,11 +216,11 @@ class ReelServer : Disposable {
      * asked to do.
      */
     private fun trustModel(exchange: HttpExchange) {
-        val project = trustProject?.get()
+        val ask = query(exchange.requestURI.query)
+        val project = trustProjectFor(ask["path"]?.let(::decode))
         val body = when {
-            project == null || project.isDisposed -> mapOf("ready" to false, "reason" to "no project")
+            project == null -> mapOf("ready" to false, "reason" to "no project")
             else -> runCatching {
-                val ask = query(exchange.requestURI.query)
                 TrustPayload.of(
                     project,
                     ask["w"]?.toDoubleOrNull() ?: 0.0,
@@ -212,10 +242,11 @@ class ReelServer : Disposable {
      * terminal, or a file copied in from CI.
      */
     private fun trustRun(exchange: HttpExchange) {
-        val project = trustProject?.get()
-        val command = project?.takeIf { !it.isDisposed }?.let { TrustRunner.commandFor(it) }
+        if (!requirePost(exchange)) return
+        val project = trustProjectFor(query(exchange.requestURI.query)["path"]?.let(::decode))
+        val command = project?.let { TrustRunner.commandFor(it) }
         if (project == null || command == null) {
-            json(exchange, """{"started":false}""")
+            json(exchange, """{"started":false,"reason":${if (project == null) "\"no project\"" else "\"no command\""}}""")
             return
         }
         // showRunContent touches the tool window, so the whole call belongs on the event thread.
@@ -235,7 +266,8 @@ class ReelServer : Disposable {
      * Flipping the service here would leave the other two saying the opposite.
      */
     private fun trustPaint(exchange: HttpExchange) {
-        val project = trustProject?.get()?.takeIf { !it.isDisposed }
+        if (!requirePost(exchange)) return
+        val project = trustProjectFor(query(exchange.requestURI.query)["path"]?.let(::decode))
         if (project == null) {
             json(exchange, """{"paint":false}""")
             return
@@ -246,6 +278,24 @@ class ReelServer : Disposable {
         )
         json(exchange, """{"paint":${TrustService.getInstance(project).enabled}}""")
     }
+
+    /**
+     * A route that changes something answers only to POST.
+     *
+     * Belt to the separated prefix's braces. Anything at all can issue a GET, a browser
+     * prefetching a link included, and none of it should be able to start a build on somebody's
+     * project. The route that did exactly that is the reason this is here.
+     */
+    private fun requirePost(exchange: HttpExchange): Boolean {
+        if (exchange.requestMethod.equals("POST", ignoreCase = true)) return true
+        exchange.responseHeaders.add("Allow", "POST")
+        exchange.sendResponseHeaders(405, -1)
+        exchange.close()
+        return false
+    }
+
+    private fun decode(value: String): String =
+        runCatching { java.net.URLDecoder.decode(value, Charsets.UTF_8) }.getOrDefault(value)
 
     private fun query(raw: String?): Map<String, String> =
         raw.orEmpty().split('&').mapNotNull {
@@ -379,6 +429,9 @@ class ReelServer : Disposable {
         /** The trust panel, served like the deck: its own prefix on the same port. */
         private const val TRUST_ROOT = "yasin-trust"
         private const val TRUST_PREFIX = "trust"
+
+        /** Its data and its actions, deliberately not under [TRUST_PREFIX]. See mount(). */
+        private const val TRUST_API = "trust-api"
 
         private val GSON = Gson()
 

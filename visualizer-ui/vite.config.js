@@ -27,6 +27,7 @@ export default defineConfig({
       '/deck': PLUGIN,
       '/shared': PLUGIN,
       '/trust': PLUGIN,
+      '/trust-api': PLUGIN,
       '/nexus.json': PLUGIN,
     },
   },

@@ -27,7 +27,9 @@
   var selected = null;
   var pending = 0;
   var asked = '';
-  var busy = false;
+  // Set while the click is in flight, then handed over to the IDE's own answer. The page has
+  // no way of knowing when a coverage run ends, so it stops guessing as soon as it can ask.
+  var starting = false;
 
   function byId(id) { return document.getElementById(id); }
 
@@ -51,13 +53,25 @@
    * empty with a caption saying nothing could be drawn. The observer below catches the reveal
    * and asks again; this is what makes the second answer replace the first rather than race it.
    */
+  /**
+   * This panel's own project, taken from the frame's URL.
+   *
+   * The map page puts it there when it builds the iframe. Sending it back means a second open
+   * project cannot be answered about by mistake, which matters more than usual here because one
+   * of these routes starts a build.
+   */
+  function project() {
+    var path = new URLSearchParams(window.location.search).get('projectPath');
+    return path ? '&path=' + encodeURIComponent(path) : '';
+  }
+
   function ask() {
     var box = dom.map.parentElement.getBoundingClientRect();
     var w = Math.round(box.width);
     var h = Math.round(box.height);
     asked = w + 'x' + h;
-    var query = '?w=' + w + '&h=' + h + (dom.deadOnly.checked ? '&dead=1' : '');
-    fetch('/trust/model.json' + query, { cache: 'no-store' })
+    var query = '?w=' + w + '&h=' + h + (dom.deadOnly.checked ? '&dead=1' : '') + project();
+    fetch('/trust-api/model.json' + query, { cache: 'no-store' })
       .then(function (r) { return r.json(); })
       .then(function (data) { model = data; render(); })
       .catch(function () { /* The IDE is not there. The panel says so through its empty state. */ });
@@ -423,6 +437,7 @@
     // "Set up coverage" with an ellipsis here and opened a dialog on click; a disabled button
     // with an ellipsis promises a next step it cannot take, and the instructions for taking it
     // are already on the card below.
+    var busy = starting || Boolean(model.running);
     dom.run.textContent = busy ? 'Running…' : command ? 'Run with coverage' : 'No coverage command';
     dom.run.disabled = busy || !command;
     dom.run.title = command
@@ -470,17 +485,31 @@
 
     dom.run.addEventListener('click', function () {
       if (dom.run.disabled) return;
-      busy = true;
+      starting = true;
       render();
-      fetch('/trust/run', { method: 'POST' })
+      fetch('/trust-api/run?x=1' + project(), { method: 'POST' })
+        .then(function (r) { return r.json(); })
+        // A refusal is worth saying out loud. It used to be thrown away, so the one case where
+        // the plugin knew exactly what was wrong was the one case nobody was told about.
+        .then(function (body) {
+          if (body && body.started === false) {
+            dom.run.title = body.reason === 'no project'
+              ? 'The IDE did not say which project this panel is for.'
+              : 'Nexus could not guess how to run this project with coverage. Name the command in ' +
+                '.nexus/trust.json at the project root, as { "command": "..." }.';
+          }
+        })
         .catch(function () {})
-        // The result does not come back through this reply. The report file is watched, so
-        // whatever the run produces arrives the same way a terminal run's would.
-        .finally(function () { window.setTimeout(function () { busy = false; ask(); }, 1200); });
+        // The reply says only that it started. How long it runs for is the IDE's to report, and
+        // it does, in every model it sends back, so the guess ends as soon as the next one lands.
+        // What the run produces arrives the way a terminal run's would: the report is watched.
+        .finally(function () {
+          window.setTimeout(function () { starting = false; ask(); }, 900);
+        });
     });
 
     dom.paint.addEventListener('change', function () {
-      fetch('/trust/paint', { method: 'POST' })
+      fetch('/trust-api/paint?x=1' + project(), { method: 'POST' })
         .then(function (r) { return r.json(); })
         .then(function (body) { dom.paint.checked = Boolean(body.paint); })
         .catch(function () {});
@@ -504,7 +533,11 @@
     else window.addEventListener('resize', askSoon);
     // The report is watched on the IDE side, so a run from a terminal changes the answer with
     // nothing pressed here. Asking on a slow beat is what turns that into a redraw.
-    window.setInterval(ask, 4000);
+    window.setInterval(function () {
+      ask();
+      // A run in flight is the one time the answer is about to change, so the beat quickens.
+      if (model && model.running) window.setTimeout(ask, 1300);
+    }, 4000);
     ask();
   }
 

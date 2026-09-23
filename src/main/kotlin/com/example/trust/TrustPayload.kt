@@ -53,6 +53,7 @@ object TrustPayload {
             "placeholder" to service.isPlaceholder(),
             "source" to service.describeSource(),
             "paint" to service.enabled,
+            "running" to TrustRunner.isRunning(project),
             "command" to command?.let { mapOf("text" to it.command, "origin" to it.origin) },
         )
 

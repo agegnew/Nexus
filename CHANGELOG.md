@@ -33,6 +33,29 @@
   The runner is Node, started by the IDE on demand and handed the key from Settings, so
   nothing is typed into a terminal to use it.
 
+### Fixed
+
+- The Trust panel had no JavaScript at all. Its data routes were registered under `/trust`, the
+  prefix its files are served from, and `/trust/run` is a prefix of `/trust/runtime/trust.js`,
+  so the panel's only script was answered by the run-coverage handler. Every control on it was
+  dead, and opening the panel silently started a coverage build on the open project. The data
+  routes moved to their own prefix, a route that changes something answers only to POST, and a
+  test compares the two lists so this cannot come back.
+- "Run with coverage" now finds a command in projects whose tests are not at the root. The
+  report reader already looked in `backend/` and friends while the command guesser looked only
+  at the root, so a project could show real coverage above a button that said it did not know
+  how to produce any. The command also runs in the directory it was found in.
+- The button says "Running" for as long as the run actually takes. It used to say so for 1.2
+  seconds and then go back, which reads exactly like a button that did nothing, and a second
+  press started a second build on top of the first.
+- Two open projects no longer share one Trust panel. The routes are keyed by project path, and
+  the panel sends its own, so the button cannot start a build in the other window.
+- The swarm falls back to the browser already on the machine. Playwright has no Chromium build
+  for macOS 12, so `npx playwright install chromium` refuses there and every run died on a
+  missing executable. The bundled build is still tried first.
+- The swarm says what is missing before a run rather than after. A missing browser was only
+  reported by Playwright, in the report, once the agents had already been sitting idle.
+
 ### Changed
 
 - One row of six views, and Trust is in it. Trust was a second tab on the side of the

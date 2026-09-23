@@ -69,4 +69,38 @@ class SwarmLaunchTest {
         File(dir, "node_modules/playwright").mkdirs()
         assertTrue(SwarmLaunch.hasDependencies(dir))
     }
+
+    /**
+     * Forgetting `npx playwright install chromium` fails much later and far less clearly than
+     * forgetting `npm install`: the runner starts, the tab connects, the five agents sit saying
+     * "Waiting for a mission", and the run ends with Playwright's own message about a missing
+     * executable printed into the report twice. The check has to happen before any of that.
+     */
+    @Test
+    fun `a cache with no chromium in it is reported as no browser`() {
+        val home = temp.newFolder("home")
+        File(home, "Library/Caches/ms-playwright/firefox-1234").mkdirs()
+
+        assertFalse(SwarmLaunch.hasBrowser(emptyMap(), home.path))
+    }
+
+    @Test
+    fun `a cache holding a chromium is enough`() {
+        val home = temp.newFolder("home")
+        File(home, "Library/Caches/ms-playwright/chromium_headless_shell-1243").mkdirs()
+
+        assertTrue(SwarmLaunch.hasBrowser(emptyMap(), home.path))
+    }
+
+    @Test
+    fun `an explicit browsers path is honoured, and zero means do not guess`() {
+        val home = temp.newFolder("home")
+        val custom = temp.newFolder("elsewhere")
+        File(custom, "chromium-1200").mkdirs()
+
+        assertTrue(SwarmLaunch.hasBrowser(mapOf("PLAYWRIGHT_BROWSERS_PATH" to custom.path), home.path))
+        // "0" keeps the browsers inside node_modules, where this cannot see them. Saying "no"
+        // there would block a setup that works, which is the worse mistake of the two.
+        assertTrue(SwarmLaunch.hasBrowser(mapOf("PLAYWRIGHT_BROWSERS_PATH" to "0"), home.path))
+    }
 }

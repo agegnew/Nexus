@@ -83,6 +83,49 @@ class TrustRunnerTest {
         assertTrue(TrustRunner.commandFor(root)!!.command.contains("pytest"))
     }
 
+    /**
+     * The shape that made this button useless: a repository whose root holds no manifest at all
+     * because the Python lives in backend/. CoverageReportSource already reads backend/coverage.xml
+     * on such a project, so the tab showed real coverage above a button that said it did not know
+     * how to produce any.
+     */
+    @Test
+    fun `a project whose tests live in a subdirectory is still recognised`() {
+        val root = temp.newFolder("project")
+        file(root, "README.md", "a repo with no manifest at its root")
+        file(root, "backend/requirements.txt", "fastapi\n")
+        file(root, "backend/pytest.ini", "[pytest]\n")
+        file(root, "frontend/index.html", "<!doctype html>")
+
+        val command = TrustRunner.commandFor(root)!!
+
+        assertTrue(command.command.contains("pytest"))
+        // The command has to RUN there too, or it writes its report next to the wrong tests.
+        assertEquals("backend", command.directory)
+        assertTrue("the origin should say where it looked: ${command.origin}", command.origin.contains("backend"))
+    }
+
+    /** The root wins when both could answer, because that is where a person would look first. */
+    @Test
+    fun `the root is preferred over a subdirectory`() {
+        val root = temp.newFolder("project")
+        file(root, "requirements.txt", "fastapi\n")
+        file(root, "backend/requirements.txt", "fastapi\n")
+
+        assertEquals("", TrustRunner.commandFor(root)!!.directory)
+    }
+
+    /** A virtual environment at the repository root serves tests that live a folder down. */
+    @Test
+    fun `a venv at the root is used by tests in a subdirectory`() {
+        val root = temp.newFolder("project")
+        file(root, "backend/requirements.txt", "fastapi\n")
+        val python = file(root, ".venv/bin/python", "#!/bin/sh\n")
+        python.setExecutable(true)
+
+        assertTrue(TrustRunner.commandFor(root)!!.command.contains(python.path))
+    }
+
     private fun file(root: File, path: String, content: String): File =
         File(root, path).apply {
             parentFile.mkdirs()
