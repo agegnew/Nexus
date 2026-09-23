@@ -6,6 +6,7 @@ import { UNIVERSAL_FORBID } from './missions.mjs'
 import { pathOf } from './codemap.mjs'
 import { createAccount } from './account.mjs'
 import { writeReview } from './review.mjs'
+import { STEP_BUDGET, NO_CHANGE_LIMIT, stepsFor, freshStepResults, changeBetween, evidenceOnPage, sameAction, testCaseText, quotedProof } from './testcase.mjs'
 
 const MAX_SNAPSHOT = 6000
 
@@ -95,14 +96,36 @@ export async function startScreencast(page, onFrame, { fps = 6, maxWidth = 720, 
   }
 }
 
+/**
+ * The current value of every visible form field. The accessibility tree leaves out what a
+ * dropdown has selected and what a field holds, so without this a tester cannot see its own
+ * typing or choice take effect. Password fields only say whether they are filled.
+ */
+async function formState(page) {
+  const fields = await page.locator('input, select, textarea').evaluateAll((elements) => elements
+    .filter((element) => element.offsetParent !== null && element.type !== 'hidden')
+    .slice(0, 30)
+    .map((element) => {
+      const label = element.getAttribute('aria-label') || element.labels?.[0]?.innerText || element.placeholder || element.name || element.id || element.type
+      let value
+      if (element.type === 'checkbox' || element.type === 'radio') value = element.checked ? 'ticked' : 'not ticked'
+      else if (element.type === 'password') value = element.value ? '(filled)' : '(empty)'
+      else if (element.tagName === 'SELECT') value = element.selectedOptions?.[0]?.textContent?.trim() || '(nothing selected)'
+      else value = element.value === '' ? '(empty)' : element.value
+      return `- ${String(label).trim().replace(/\s+/g, ' ').slice(0, 50)} (${element.tagName === 'SELECT' ? 'dropdown' : element.type || 'text'}): ${String(value).slice(0, 80)}`
+    })).catch(() => [])
+  return fields.length ? `\nForm fields (current values):\n${fields.join('\n')}` : ''
+}
+
 /** What the agent can see right now. */
 async function observe(page) {
   const url = page.url()
   const snapshot = await page.locator('body').ariaSnapshot({ timeout: 2500 }).catch(() => '')
   const text = await page.locator('body').innerText({ timeout: 2500 }).catch(() => '')
+  const fields = await formState(page)
   return {
     url,
-    snapshot: snapshot.trim() ? snapshot.slice(0, MAX_SNAPSHOT) : '(the page is completely empty)',
+    snapshot: snapshot.trim() ? `${snapshot.slice(0, MAX_SNAPSHOT)}${fields}` : '(the page is completely empty)',
     text: text.slice(0, 4000),
   }
 }
@@ -154,8 +177,13 @@ async function act(page, action, cursor, account) {
     case 'goto': {
       // Only within the app under test: a model must not wander off to another site.
       const next = new URL(action.value || '/', page.url())
-      if (next.origin !== new URL(page.url()).origin) throw new Error(`Refused to leave the app for ${next.origin}`)
-      await page.goto(next.toString(), { waitUntil: 'domcontentloaded' })
+      const here = new URL(page.url())
+      if (next.origin !== here.origin) throw new Error(`Refused to leave the app for ${next.origin}`)
+      if (next.pathname === here.pathname && next.search === here.search) {
+        throw new Error(`You are already on ${here.pathname}. Read the page instead of reloading it.`)
+      }
+      // Wait for the page to settle, so its content (not a half-rendered shell) is what gets compared.
+      await page.goto(next.toString(), { waitUntil: 'networkidle', timeout: 12_000 }).catch(() => {})
       return
     }
     case 'back':
@@ -273,12 +301,31 @@ export function judge({ mission, text, evidence, claimed, steps, maxSteps }) {
 
 function historyText(history) {
   if (history.length === 0) return '(nothing yet)'
-  return history.slice(-8).map((entry, index) => `${index + 1}. ${entry.what}${entry.error ? ` -> FAILED: ${entry.error}` : ' -> ok'}`).join('\n')
+  return history.slice(-10).map((entry, index) => `${index + 1}. ${entry.what} -> ${entry.error ? `FAILED: ${entry.error}` : entry.effect ?? 'ok'}`).join('\n')
 }
 
 /**
- * Runs one mission to a verdict. [emit] receives progress events for the live tiles; the
- * return value is everything the report needs.
+ * Closes the step list once the verdict is known: a failed run always names the step it failed on,
+ * and steps after a failure were never tried.
+ */
+export function settleSteps(results, verdict, reason) {
+  if (verdict.status === 'failed' && !results.some((step) => step.status === 'failed')) {
+    const open = results.findIndex((step) => step.status === 'running' || step.status === 'pending')
+    const index = open < 0 ? results.length - 1 : open
+    results[index].status = 'failed'
+    results[index].observed = results[index].observed ?? reason
+  }
+  let broken = false
+  for (const step of results) {
+    if (step.status === 'failed') broken = true
+    else if (step.status === 'running' || step.status === 'pending') step.status = broken || verdict.status === 'failed' ? 'skipped' : 'passed'
+  }
+  return results
+}
+
+/**
+ * Runs one mission, a written test case, to a verdict. [emit] receives progress events for the
+ * live tiles; the return value is everything the report needs.
  */
 export async function runAgent({ mission, page, target, brain, emit, maxSteps: defaultMaxSteps = 12, pace = 900, isStopped = () => false, account = createAccount(), app = '' }) {
   const startedAt = Date.now()
@@ -289,22 +336,31 @@ export async function runAgent({ mission, page, target, brain, emit, maxSteps: d
   const journal = []
   const notes = []
   const cursor = { x: 40, y: 40 }
+  const results = freshStepResults(stepsFor(mission))
+  let current = 0
   let mode = brain.canThink ? 'model' : 'script'
   let scriptIndex = 0
   let claimed = null
   let steps = 0
+  let turns = 0
+  let noChange = 0
+  let last = null
+  // The requests the current action caused, so its effect can be described.
+  let recent = []
 
   page.on('response', (response) => {
     const request = response.request()
     if (!['fetch', 'xhr'].includes(request.resourceType())) return
     evidence.requests += 1
     const record = { method: request.method(), path: pathOf(request.url()), status: response.status() }
+    recent.push(record)
     emit({ type: 'network', id: mission.id, ...record })
     if (record.status >= 400) evidence.apiErrors.push(record)
   })
   page.on('requestfailed', (request) => {
     if (!['fetch', 'xhr'].includes(request.resourceType())) return
     const record = { method: request.method(), path: pathOf(request.url()), status: 0 }
+    recent.push(record)
     evidence.apiErrors.push(record)
     emit({ type: 'network', id: mission.id, ...record })
   })
@@ -316,9 +372,23 @@ export async function runAgent({ mission, page, target, brain, emit, maxSteps: d
     evidence.crashStack = evidence.crashStack ?? String(error.stack ?? '')
   })
 
+  const stepView = () => results.map(({ do: instruction, expect, status, observed }) => ({ do: instruction, expect, status, observed }))
   const say = (status, thought, action) => emit({
-    type: 'agent', id: mission.id, status, step: steps, thought: account.mask(thought), action: describe(action, account),
+    type: 'agent', id: mission.id, status, step: steps, thought: account.mask(thought), action: describe(action, account), testSteps: stepView(),
   })
+  const failStep = (reason) => {
+    results[current].status = 'failed'
+    results[current].observed = account.mask(reason).slice(0, 160)
+    claimed = { status: 'failed', summary: `Step ${current + 1} failed: ${results[current].observed}` }
+  }
+  const passStep = (observed) => {
+    results[current].status = 'passed'
+    results[current].observed = observed ? account.mask(observed).slice(0, 160) : null
+    current += 1
+    noChange = 0
+    last = null
+    if (current < results.length) results[current].status = 'running'
+  }
 
   say('running', 'Opening the app.')
   try {
@@ -328,20 +398,23 @@ export async function runAgent({ mission, page, target, brain, emit, maxSteps: d
   }
   await page.waitForTimeout(pace)
 
-  // A crash ends the journey at once: there is nothing left to click, and the crash is the finding.
-  while (steps < maxSteps && !isStopped() && evidence.pageErrors.length === 0) {
+  // A crash ends the test at once: there is nothing left to click, and the crash is the finding.
+  while (turns < maxSteps + results.length && !isStopped() && evidence.pageErrors.length === 0) {
+    turns += 1
     const seen = await observe(page)
     let decision
 
     if (mode === 'model') {
       const errors = evidence.apiErrors.map((error) => `${error.method} ${error.path} -> HTTP ${error.status}`).join('\n') || 'none'
+      const step = results[current]
       try {
         decision = await brain.json(AGENT_SYSTEM, [
           `Persona: ${mission.persona}`,
-          `Goal: ${mission.goal}`,
+          `Test: ${mission.goal}`,
           app ? `The app: ${app}` : '',
-          mission.login ? `This goal needs you signed in. ${account.brief()}` : account.brief(),
-          `Step ${steps + 1} of ${maxSteps}. URL: ${seen.url}`,
+          mission.login ? `This test needs you signed in. ${account.brief()}` : account.brief(),
+          `Test case:\n${testCaseText(results, current)}`,
+          `CURRENT STEP ${current + 1} of ${results.length}: ${step.do}\nExpected: ${step.expect || 'the action visibly worked'}\nActions used on this step: ${step.actions} of ${STEP_BUDGET}. URL: ${seen.url}`,
           `What you did so far:\n${historyText(history)}`,
           `Failed network requests so far:\n${errors}`,
           `Accessibility tree:\n${account.mask(seen.snapshot)}`,
@@ -356,16 +429,23 @@ export async function runAgent({ mission, page, target, brain, emit, maxSteps: d
         say('running', 'Model unavailable, switching to the scripted journey.')
         await page.goto(target, { waitUntil: 'networkidle', timeout: 15_000 }).catch(() => {})
         history.length = 0
+        results.splice(0, results.length, ...freshStepResults(stepsFor(mission)))
+        current = 0
         continue
       }
     } else {
       const next = mission.script?.[scriptIndex++]
+      // A scripted journey moves through its steps as its actions do.
+      while (next && Number.isInteger(next.step) && next.step > current && current < results.length - 1) passStep(null)
       decision = next
         ? { thought: next.thought, action: next }
         : { thought: 'That was the whole journey. Checking the result.', action: { type: 'done' } }
     }
 
-    const action = decision?.action ?? { type: 'wait' }
+    // The model's answer to "is the expected result on the page now?" counts as a step report.
+    const action = mode === 'model' && decision?.expected_visible === true && decision?.action?.type !== 'step'
+      ? { type: 'step', result: 'passed', evidence: decision.evidence ?? '' }
+      : decision?.action ?? { type: 'wait' }
     if (typeof decision?.note === 'string' && decision.note.trim() && notes.length < 12) notes.push(account.mask(decision.note.trim().slice(0, 200)))
 
     if (action.type === 'done') {
@@ -374,36 +454,112 @@ export async function runAgent({ mission, page, target, brain, emit, maxSteps: d
       break
     }
 
-    steps += 1
-    say('running', decision.thought || '', action)
+    if (action.type === 'step') {
+      const quote = String(action.evidence ?? '').slice(0, 200)
+      if (action.result === 'passed') {
+        if (evidenceOnPage(quote, `${seen.text}\n${seen.snapshot}`)) {
+          const entry = { what: `check step ${current + 1}`, effect: `PASSED, seen "${account.mask(quote)}"`, thought: account.mask(decision.thought || '') }
+          history.push(entry)
+          journal.push(entry)
+          passStep(quote)
+          say('running', decision.thought || `Step ${current} passed.`, null)
+          if (current >= results.length) {
+            claimed = { status: 'passed', summary: `All ${results.length} steps passed` }
+            break
+          }
+          continue
+        }
+        // The model claimed a result the page does not show: not accepted, and it costs an action.
+        results[current].actions += 1
+        const entry = { what: `check step ${current + 1}`, error: `REJECTED: "${account.mask(quote)}" is not on the page. Quote real text, or report the step failed.`, thought: account.mask(decision.thought || '') }
+        history.push(entry)
+        journal.push(entry)
+        if (results[current].actions > STEP_BUDGET) {
+          failStep(`expected "${results[current].expect}" but it never appeared`)
+          break
+        }
+        continue
+      }
+      failStep(quote || decision.thought || 'the expected result did not appear')
+      say('running', decision.thought || `Step ${current + 1} failed.`, null)
+      break
+    }
+
+    // A step that is going nowhere is a finding, not a reason to keep clicking.
+    if (mode === 'model' && results[current].actions >= STEP_BUDGET) {
+      failStep(`no result after ${STEP_BUDGET} actions; expected "${results[current].expect}"`)
+      break
+    }
+    if (mode === 'model' && noChange >= NO_CHANGE_LIMIT) {
+      failStep(`${NO_CHANGE_LIMIT} actions in a row changed nothing on the page`)
+      break
+    }
+
+    results[current].actions += 1
     const entry = { what: describe(action, account), thought: account.mask(decision.thought || '') }
-    try {
-      await act(page, action, cursor, account)
-    } catch (error) {
-      entry.error = account.mask(error.message.split('\n')[0].slice(0, 160))
+    if (mode === 'model' && last && !last.changed && sameAction(last.action, action)) {
+      entry.error = 'REFUSED: you already did exactly this and nothing changed. Do something different, or report the step failed.'
+      noChange += 1
+    } else {
+      steps += 1
+      say('running', decision.thought || '', action)
+      recent = []
+      try {
+        await act(page, action, cursor, account)
+      } catch (error) {
+        entry.error = account.mask(error.message.split('\n')[0].slice(0, 160))
+      }
+      await page.waitForTimeout(pace)
+      const after = entry.error ? null : await observe(page)
+      const change = after ? changeBetween(seen, after, recent) : { changed: false }
+      if (!entry.error) entry.effect = account.mask(change.text)
+      noChange = change.changed ? 0 : noChange + 1
+      last = { action, changed: change.changed }
+
+      // The runner checks the step itself: once the step's action has been done, the text its
+      // expected result quotes being on the page is proof enough, whatever the model says next.
+      const proof = after && mode === 'model' ? quotedProof(results[current].expect, `${after.text}\n${after.snapshot}`) : null
+      if (proof) {
+        entry.effect = `${entry.effect}; step ${current + 1} PASSED, seen "${account.mask(proof)}"`
+        history.push(entry)
+        journal.push(entry)
+        passStep(proof)
+        say('running', `Step ${current} passed: I can see "${account.mask(proof)}".`, null)
+        if (current >= results.length) {
+          claimed = { status: 'passed', summary: `All ${results.length} steps passed` }
+          break
+        }
+        continue
+      }
     }
     history.push(entry)
     journal.push(entry)
-    await page.waitForTimeout(pace)
+  }
+
+  // Out of turns, or stopped, without a result: that is a failure to finish, not a pass.
+  if (!claimed && mode === 'model' && evidence.pageErrors.length === 0) {
+    claimed = { status: 'failed', summary: isStopped() ? 'Stopped before finishing' : `Ran out of actions on step ${Math.min(current + 1, results.length)}` }
   }
 
   await page.waitForTimeout(400)
   const final = await observe(page)
   const verdict = judge({ mission, text: final.text, evidence, claimed, steps, maxSteps })
+  settleSteps(results, verdict, account.mask(verdictThought(verdict)))
   const screenshot = await page.screenshot({ type: 'jpeg', quality: 70 }).catch(() => null)
 
   // The verdict is already final; the tile says what the agent is doing while the model writes.
   if (mode === 'model') say('running', 'Writing my review.')
   const review = mode === 'model'
-    ? await writeReview(brain, { mission, app, journal, notes, verdict, evidence, finalText: account.mask(final.text), mask: account.mask })
+    ? await writeReview(brain, { mission, app, journal, notes, verdict, evidence, finalText: account.mask(final.text), mask: account.mask, testSteps: stepView() })
     : null
-  emit({ type: 'agent', id: mission.id, status: verdict.status, step: steps, thought: account.mask(verdictThought(verdict)), action: '', review })
+  emit({ type: 'agent', id: mission.id, status: verdict.status, step: steps, thought: account.mask(verdictThought(verdict)), action: '', review, testSteps: stepView() })
 
   return {
     mission,
     verdict,
     evidence,
     steps,
+    testSteps: stepView(),
     durationMs: Date.now() - startedAt,
     mode,
     claimed,

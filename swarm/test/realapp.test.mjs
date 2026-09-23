@@ -94,7 +94,8 @@ test('the reviewer never sees the password, even if the page echoed it', async (
 
 test('the planner gets the docs, the crawl and the account, but no password', async () => {
   let prompt = ''
-  const missions = Array.from({ length: 5 }, (_, index) => ({ id: `m ${index}`, persona: 'Member', goal: 'Borrow a book', login: index < 2, expect: '(' }))
+  const steps = [{ do: 'Click "Books"', expect: 'A list of books' }, { do: 'Click "Borrow" on the first book', expect: 'A message "Borrowed"' }, 'Open "My loans"', { expect: 'no instruction, dropped' }]
+  const missions = Array.from({ length: 5 }, (_, index) => ({ id: `m ${index}`, persona: 'Member', goal: 'Borrow a book', login: index < 2, expect: '(', steps }))
   const brain = { canThink: true, json: async (system, user) => { prompt = user; return { app: 'A library for members.', missions } } }
   const planned = await planMissions(brain, {
     graphText: 'web/src/api.ts: GET /api/books',
@@ -111,7 +112,8 @@ test('the planner gets the docs, the crawl and the account, but no password', as
   assert.doesNotMatch(prompt, /hunter22/)
   assert.equal(planned.app, 'A library for members.')
   assert.deepEqual(planned.missions.map((mission) => mission.id), ['m-0', 'm-1', 'm-2', 'm-3', 'm-4'])
-  assert.equal(planned.missions[0].maxSteps, 20, 'signing in gets a bigger step budget')
+  assert.deepEqual(planned.missions[0].steps.map((step) => step.do), ['Click "Books"', 'Click "Borrow" on the first book', 'Open "My loans"'])
+  assert.equal(planned.missions[0].maxSteps, 14, 'a few actions per step, not an open-ended budget')
   assert.equal(planned.missions[0].expect, null, 'an invalid regex is dropped')
 })
 

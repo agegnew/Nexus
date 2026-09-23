@@ -1,0 +1,11 @@
+{
+  "name": "nexus-plugin-workspace",
+  "private": true,
+  "description": "Shortcuts for the Node halves of the Nexus plugin: the web UI (visualizer-ui) and the swarm runner (swarm). The plugin itself builds with Gradle.",
+  "scripts": {
+    "dev": "npm --prefix visualizer-ui run dev",
+    "setup": "npm --prefix visualizer-ui install && npm --prefix swarm install && npm --prefix swarm exec playwright install chromium",
+    "swarm": "npm --prefix swarm run serve",
+    "test": "npm --prefix swarm test"
+  }
+}

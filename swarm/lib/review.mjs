@@ -46,12 +46,13 @@ export function normalizeReview(reply, verdictStatus) {
 }
 
 /** Asks the model for the persona's review. Null without a model, or when it fails. */
-export async function writeReview(brain, { mission, app, journal, notes, verdict, evidence, finalText, mask = (text) => text }) {
+export async function writeReview(brain, { mission, app, journal, notes, verdict, evidence, finalText, mask = (text) => text, testSteps = null }) {
   if (!brain.canThink) return null
   const facts = [
     `Persona: ${mission.persona}`,
     `Goal: ${mission.goal}`,
     app ? `The app: ${app}` : '',
+    testSteps?.length ? `Test case results:\n${testSteps.map((step, index) => `${index + 1}. [${step.status}] ${step.do} (expected: ${step.expect})${step.observed ? ` seen: "${step.observed}"` : ''}`).join('\n')}` : '',
     `Steps:\n${journal.map((entry, index) => `${index + 1}. ${entry.thought ? `(${entry.thought}) ` : ''}${entry.what}${entry.error ? ` -> FAILED: ${entry.error}` : ''}`).join('\n') || '(none)'}`,
     `Remarks noted along the way:\n${notes.map((note) => `- ${note}`).join('\n') || '(none)'}`,
     `Automated verdict: ${verdict.status} (${verdict.reason})${verdict.detail ? `: ${verdict.detail}` : ''}`,

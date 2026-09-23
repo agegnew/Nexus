@@ -24,7 +24,7 @@ function fakeOpenAi(missions) {
     const user = body.messages[1].content
     let reply
 
-    if (system.startsWith('You are a user testing')) {
+    if (system.startsWith('You are a manual QA tester')) {
       calls.agent += 1
       const persona = user.match(/^Persona: (.+)$/m)[1]
       const mission = missions.find((item) => item.persona === persona)

@@ -5,6 +5,7 @@ import { chromium } from 'playwright'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { runAgent, overlayScript, startScreencast } from './agent.mjs'
+import { stepsFor } from './testcase.mjs'
 import { DEMO_MISSIONS, planMissions, looksLikeDemoApp } from './missions.mjs'
 import { describeGraph } from './codemap.mjs'
 import { buildReport, polishReport, toMarkdown } from './report.mjs'
@@ -50,6 +51,43 @@ async function readPage(page) {
   }
 }
 
+const NAV_CONTROLS = 'nav button, nav [role=tab], header button, [role=navigation] button, [role=tablist] [role=tab], [role=menubar] [role=menuitem]'
+const RISKY = /log ?out|sign ?out|delete|remove|reset|clear|pay|buy|checkout|submit/i
+
+/**
+ * Single-page apps often switch screens with buttons rather than links, which a link crawl never
+ * sees. From the home page, click each navigation button once and record the screen it shows, so
+ * the planner knows what is on "Order" or "Settings" instead of guessing.
+ */
+async function visitNavigation(page, target, pages) {
+  await page.goto(target, { waitUntil: 'networkidle', timeout: 10_000 }).catch(() => {})
+  const labels = [...new Set(
+    (await page.locator(NAV_CONTROLS).allInnerTexts().catch(() => []))
+      .map((label) => label.trim().replace(/\s+/g, ' '))
+      .filter((label) => label && label.length <= 40 && !RISKY.test(label)),
+  )].slice(0, 8)
+  const known = new Set(pages.map((seen) => seen.snapshot))
+  for (const label of labels) {
+    if (pages.length >= SCOUT_PAGES + 4) break
+    await page.goto(target, { waitUntil: 'networkidle', timeout: 10_000 }).catch(() => {})
+    const control = page.locator(NAV_CONTROLS).filter({ hasText: label }).first()
+    const clicked = await control.click({ timeout: 3000 }).then(() => true, () => false)
+    if (!clicked) continue
+    await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {})
+    await page.waitForTimeout(300)
+    const seen = await readPage(page)
+    // A button that shows the screen already recorded (often the home view itself) adds nothing,
+    // except the fact that it IS that screen, which is what stops a planner expecting a change.
+    if (known.has(seen.snapshot)) {
+      const same = pages.find((recorded) => recorded.snapshot === seen.snapshot)
+      same.path = `${same.path} (also what "${label}" shows)`
+      continue
+    }
+    known.add(seen.snapshot)
+    pages.push({ ...seen, path: `${seen.path} after clicking "${label}"` })
+  }
+}
+
 /**
  * Walks the home page and a few pages its own links lead to, like a tester's first look around,
  * so the planner knows which screens exist and where the sign-in form is.
@@ -82,6 +120,7 @@ async function scout(browser, target, routes = []) {
       const ok = await page.goto(href, { waitUntil: 'networkidle', timeout: 8000 }).then(() => true, () => false)
       if (ok) pages.push(await readPage(page))
     }
+    await visitNavigation(page, target, pages)
   } catch {
     // The crawl is a bonus; the home page alone is enough to plan from.
   } finally {
@@ -152,6 +191,7 @@ export async function runSwarm({ target, graph = null, headed = false, plan = 'a
       app,
       missions: missions.map((mission, index) => ({
         id: mission.id, persona: mission.persona, emoji: mission.emoji, goal: mission.goal, color: AGENT_COLORS[index % AGENT_COLORS.length],
+        steps: stepsFor(mission),
       })),
     })
     emit({ type: 'run', phase: 'running', message: target })
@@ -181,6 +221,7 @@ export async function runSwarm({ target, graph = null, headed = false, plan = 'a
           verdict: { status: 'failed', reason: 'blocked', detail: stopped() ? 'Stopped before finishing' : message, reached: null },
           evidence: { apiErrors: [], consoleErrors: [], pageErrors: [], requests: 0 },
           steps: 0,
+          testSteps: stepsFor(mission).map((step, stepIndex) => ({ ...step, status: stepIndex === 0 ? 'failed' : 'skipped', observed: stepIndex === 0 ? message : null })),
           durationMs: Date.now() - startedAt,
           mode: 'error',
           screenshot: null,

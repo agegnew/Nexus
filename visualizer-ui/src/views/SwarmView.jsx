@@ -57,7 +57,7 @@ const initialState = {
 const LIVE_PHASES = ['starting', 'scouting', 'planning', 'running', 'reporting']
 
 function blankAgent() {
-  return { status: 'queued', thought: '', action: '', step: 0, lastCall: null, calls: 0, failedCalls: 0, review: null }
+  return { status: 'queued', thought: '', action: '', step: 0, lastCall: null, calls: 0, failedCalls: 0, review: null, testSteps: null }
 }
 
 function reduce(state, event) {
@@ -69,7 +69,7 @@ function reduce(state, event) {
     case 'snapshot': {
       const snapshot = event.state ?? {}
       const agents = Object.fromEntries(Object.entries(snapshot.agents ?? {}).map(([id, agent]) => [
-        id, { ...blankAgent(), status: agent.status, thought: agent.thought, action: agent.action, step: agent.step, calls: agent.calls ?? 0, review: agent.review ?? null },
+        id, { ...blankAgent(), status: agent.status, thought: agent.thought, action: agent.action, step: agent.step, calls: agent.calls ?? 0, review: agent.review ?? null, testSteps: agent.testSteps ?? null },
       ]))
       const live = LIVE_PHASES.includes(snapshot.phase)
       return {
@@ -115,6 +115,7 @@ function reduce(state, event) {
             action: event.action ?? agent.action,
             step: event.step ?? agent.step,
             review: event.review ?? agent.review,
+            testSteps: event.testSteps ?? agent.testSteps,
           },
         },
       }
@@ -204,6 +205,45 @@ function Review({ review }) {
   )
 }
 
+const STEP_MARK = { passed: '✓', failed: '✕', skipped: '–', running: '›', pending: '' }
+
+/** The steps as they stand: live results when the agent has sent any, else the plan. */
+function currentSteps(mission, agent) {
+  if (agent?.testSteps?.length) return agent.testSteps
+  return (mission?.steps ?? []).map((step) => ({ ...step, status: 'pending', observed: null }))
+}
+
+function StepProgress({ steps }) {
+  if (!steps.length) return null
+  const index = [steps.findIndex((step) => step.status === 'running'), steps.findIndex((step) => step.status === 'failed')].find((found) => found >= 0) ?? -1
+  const shown = index >= 0 ? index : steps.every((step) => step.status === 'passed') ? steps.length - 1 : 0
+  return (
+    <div className="swarm-progress">
+      <span className="swarm-progress__bar" aria-hidden="true">
+        {steps.map((step, stepIndex) => <i key={stepIndex} className={`swarm-progress__seg swarm-progress__seg--${step.status}`} />)}
+      </span>
+      <span className={`swarm-progress__now swarm-progress__now--${steps[shown].status}`}>
+        <b>Step {shown + 1}/{steps.length}</b> {steps[shown].do}
+      </span>
+    </div>
+  )
+}
+
+function TestCase({ steps }) {
+  return (
+    <ol className="swarm-case">
+      {steps.map((step, index) => (
+        <li key={index} className={`swarm-case__step swarm-case__step--${step.status}`}>
+          <span className="swarm-case__mark" aria-label={step.status}>{STEP_MARK[step.status] ?? ''}</span>
+          <span className="swarm-case__do"><b>{index + 1}.</b> {step.do}</span>
+          <span className="swarm-case__expect">Expected: {step.expect || 'the action visibly worked'}</span>
+          {step.observed && <span className="swarm-case__seen">{step.status === 'passed' ? 'Seen' : 'Got'}: “{step.observed}”</span>}
+        </li>
+      ))}
+    </ol>
+  )
+}
+
 function Tile({ index, mission, agent, focused, onFocus, registerImage }) {
   const status = agent?.status ?? 'queued'
   const color = mission?.color ?? 'var(--border-subtle)'
@@ -235,6 +275,8 @@ function Tile({ index, mission, agent, focused, onFocus, registerImage }) {
 
       <footer className="swarm-tile__foot">
         <p className="swarm-tile__goal" title={mission?.goal}>{mission?.goal ?? 'Waiting for a mission'}</p>
+        <StepProgress steps={currentSteps(mission, agent)} />
+        {focused && currentSteps(mission, agent).length > 0 && <TestCase steps={currentSteps(mission, agent)} />}
         <div className="swarm-tile__live">
           {agent?.action && <code className="swarm-tile__action">{agent.step > 0 ? `${agent.step}. ` : ''}{agent.action}</code>}
           <CallChip call={agent?.lastCall} />
@@ -311,6 +353,12 @@ function Report({ report, colors, onZoom, onCopy, copied }) {
               <button type="button" className="swarm-row__shot" onClick={() => onZoom(jpeg(agent.screenshot))} title="See what the agent saw last">
                 <img src={jpeg(agent.screenshot)} alt={`Last screen of ${agent.persona}`} />
               </button>
+            )}
+            {agent.testSteps?.length > 0 && (
+              <details className="swarm-row__review" open={agent.status === 'failed'}>
+                <summary>Test case · {agent.testSteps.filter((step) => step.status === 'passed').length}/{agent.testSteps.length} steps passed</summary>
+                <TestCase steps={agent.testSteps} />
+              </details>
             )}
             {agent.review && (
               <details className="swarm-row__review" open={agent.status !== 'passed'}>

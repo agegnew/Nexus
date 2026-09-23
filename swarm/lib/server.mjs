@@ -47,11 +47,11 @@ export function createSwarmServer({ brain, outDir, pace, maxSteps, projectPath =
       case 'missions':
         state.missions = event.missions
         state.app = event.app ?? ''
-        state.agents = Object.fromEntries(event.missions.map((mission) => [mission.id, { status: 'queued', thought: '', action: '', step: 0, frame: null, calls: 0, review: null }]))
+        state.agents = Object.fromEntries(event.missions.map((mission) => [mission.id, { status: 'queued', thought: '', action: '', step: 0, frame: null, calls: 0, review: null, testSteps: null }]))
         break
       case 'agent': {
         const agent = state.agents[event.id]
-        if (agent) Object.assign(agent, { status: event.status, thought: event.thought, action: event.action, step: event.step }, event.review ? { review: event.review } : {})
+        if (agent) Object.assign(agent, { status: event.status, thought: event.thought, action: event.action, step: event.step }, event.review ? { review: event.review } : {}, event.testSteps ? { testSteps: event.testSteps } : {})
         break
       }
       case 'frame':
@@ -172,7 +172,7 @@ export function createSwarmServer({ brain, outDir, pace, maxSteps, projectPath =
 
     try {
       if (request.method === 'GET' && pathname === '/health') {
-        return send(response, 200, { ok: true, brain: brain.model, canThink: brain.canThink, running: Boolean(running), replaying: Boolean(replaying), project: await project })
+        return send(response, 200, { ok: true, brain: brain.model, canThink: brain.canThink, keySource: brain.keySource ?? null, running: Boolean(running), replaying: Boolean(replaying), project: await project })
       }
 
       if (request.method === 'GET' && pathname === '/events') {

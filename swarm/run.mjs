@@ -10,8 +10,9 @@
 // --project (or NEXUS_SWARM_PROJECT) is the source folder: its README, CLAUDE.md and docs brief
 // the planner. The password can also come from NEXUS_SWARM_PASSWORD, to keep it out of shell history.
 //
-// The model key comes from OPENAI_API_KEY (or OPENAI_KEY); without one the agents follow their
-// scripted journeys, so the run still works offline. NEXUS_SWARM_MODEL picks the model.
+// The model key comes from OPENAI_API_KEY, OPENAI_KEY, ~/.code-visualizer/openai-key (the plugin's
+// own key file) or the tested project's .env, in that order (lib/key.mjs). Without one the agents
+// follow their scripted journeys, so the demo still runs offline. NEXUS_SWARM_MODEL picks the model.
 
 import { readFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
@@ -20,6 +21,7 @@ import { createBrain } from './lib/brain.mjs'
 import { createSwarmServer } from './lib/server.mjs'
 import { runSwarm } from './lib/swarm.mjs'
 import { toText } from './lib/report.mjs'
+import { findKey } from './lib/key.mjs'
 
 function parseArgs(argv) {
   const [command = 'serve', ...rest] = argv
@@ -36,14 +38,13 @@ function parseArgs(argv) {
 }
 
 const options = parseArgs(process.argv.slice(2))
-const brain = createBrain({
-  apiKey: process.env.OPENAI_API_KEY || process.env.OPENAI_KEY || '',
-  model: process.env.NEXUS_SWARM_MODEL || '',
-})
+const projectPath = typeof options.project === 'string' ? resolve(options.project) : process.env.NEXUS_SWARM_PROJECT || null
+const found = findKey({ projectPath })
+const brain = createBrain({ apiKey: found.key, model: process.env.NEXUS_SWARM_MODEL || '' })
+brain.keySource = found.source
 const outDir = resolve(options.out || join(tmpdir(), 'nexus-swarm'))
 const pace = options.pace ? Number(options.pace) : undefined
 const maxSteps = options['max-steps'] ? Number(options['max-steps']) : undefined
-const projectPath = typeof options.project === 'string' ? resolve(options.project) : process.env.NEXUS_SWARM_PROJECT || null
 
 if (options.command === 'serve') {
   const server = createSwarmServer({ brain, outDir, pace, maxSteps, projectPath })
@@ -53,7 +54,8 @@ if (options.command === 'serve') {
     process.exit(1)
   })
   server.listen(port, '127.0.0.1', () => {
-    console.log(`NEXUS_SWARM_READY ${JSON.stringify({ port: server.address().port, brain: brain.model, outDir })}`)
+    console.log(`NEXUS_SWARM_READY ${JSON.stringify({ port: server.address().port, brain: brain.model, keySource: brain.keySource, outDir })}`)
+    if (!brain.canThink) console.log('No OpenAI key found (OPENAI_API_KEY, ~/.code-visualizer/openai-key, or the project .env): only the demo can be tested.')
   })
   // The IDE closes stdin when it shuts the swarm down; exit rather than linger as an orphan.
   if (options['exit-with-stdin']) process.stdin.on('end', () => process.exit(0)).resume()

@@ -621,6 +621,57 @@
 .swarm-severity--major { color: var(--unmatched); background: oklch(69% 0.15 30 / 0.16); }
 .swarm-severity--minor { color: var(--project); background: oklch(81% 0.12 95 / 0.14); }
 
+/* Test cases: the step bar on each tile, the full list when enlarged and in the report -------- */
+
+.swarm-progress { display: grid; gap: 4px; min-width: 0; }
+.swarm-progress__bar { display: flex; gap: 3px; }
+.swarm-progress__seg { flex: 1; height: 4px; border-radius: 2px; background: var(--border-subtle); }
+.swarm-progress__seg--running { background: var(--agent); animation: swarm-pulse 1s ease-in-out infinite; }
+.swarm-progress__seg--passed { background: oklch(72% 0.15 150); }
+.swarm-progress__seg--failed { background: var(--unmatched); }
+.swarm-progress__seg--skipped { background: var(--border-subtle); opacity: 0.5; }
+.swarm-progress__now {
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.swarm-progress__now b { color: var(--text-muted); font-weight: 650; }
+.swarm-progress__now--failed { color: var(--unmatched); }
+.swarm-tile--focus .swarm-progress__now { display: none; }
+
+.swarm-case { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.swarm-row__review .swarm-case { padding: 10px 0 4px 18px; }
+.swarm-case__step {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 1px 8px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.swarm-case__mark {
+  grid-row: span 3;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 50%;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+.swarm-case__step--passed .swarm-case__mark { color: #fff; border-color: transparent; background: oklch(64% 0.16 150); }
+.swarm-case__step--failed .swarm-case__mark { color: #fff; border-color: transparent; background: oklch(60% 0.19 28); }
+.swarm-case__step--running .swarm-case__mark { color: var(--agent); border-color: var(--agent); }
+.swarm-case__step--skipped { opacity: 0.55; }
+.swarm-case__do { color: var(--text-primary); }
+.swarm-case__do b { color: var(--text-muted); }
+.swarm-case__expect { color: var(--text-muted); }
+.swarm-case__seen { color: var(--text-secondary); font-family: var(--font-code); font-size: 11px; }
+.swarm-case__step--failed .swarm-case__seen { color: var(--unmatched); }
+
 /* A narrow tool window: two across, the last tile full width. */
 @container (max-width: 760px) {
   .swarm-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }

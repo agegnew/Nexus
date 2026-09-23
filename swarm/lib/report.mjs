@@ -67,6 +67,7 @@ export function buildReport({ results, target, graph, brain, startedAt, finished
         : crash ? { method: null, path: null, status: null, missingBackend: false, frontend: crash, backend: null } : null,
       crash: result.verdict.reason === 'crash' ? result.verdict.detail : null,
       review: result.review ?? null,
+      testSteps: result.testSteps ?? null,
       screenshot: result.screenshot,
     }
   })
@@ -113,6 +114,7 @@ export async function polishReport(report, brain) {
     failing_request: agent.cause?.path ? `${agent.cause.method} ${agent.cause.path} -> ${agent.cause.status}` : null,
     backend_route_missing: agent.cause?.missingBackend ?? false,
     crash: agent.crash,
+    failed_step: agent.testSteps?.find((step) => step.status === 'failed') ?? null,
     tester_review: agent.review ? { rating: agent.review.rating, review: agent.review.review, problems: agent.review.problems.map((problem) => problem.text) } : null,
   }))
   try {
@@ -133,6 +135,11 @@ export async function polishReport(report, brain) {
 }
 
 const MARK = { passed: '✅', warning: '⚠️', failed: '❌' }
+const STEP_MARK = { passed: '✅', failed: '❌', skipped: '⏭️', pending: '⏭️', running: '…' }
+
+function cell(text) {
+  return String(text ?? '').replace(/\|/g, '\\|').replace(/\n/g, ' ')
+}
 
 export function toMarkdown(report) {
   const seconds = Math.round(report.durationMs / 1000)
@@ -143,6 +150,14 @@ export function toMarkdown(report) {
     ].filter(Boolean).join(' · ')
     return `| ${MARK[agent.status]} | ${agent.emoji} ${agent.persona} | ${agent.line} | ${where} |`
   })
+  const cases = report.agents.filter((agent) => agent.testSteps?.length).flatMap((agent) => [
+    `### ${MARK[agent.status]} ${agent.emoji} ${agent.persona}: ${agent.goal}`,
+    '',
+    '| | Step | Expected | Seen |',
+    '|---|---|---|---|',
+    ...agent.testSteps.map((step, index) => `| ${STEP_MARK[step.status] ?? ''} | ${index + 1}. ${cell(step.do)} | ${cell(step.expect)} | ${cell(step.observed ?? '')} |`),
+    '',
+  ])
   const reviews = report.agents.filter((agent) => agent.review).flatMap((agent) => {
     const review = agent.review
     return [
@@ -170,6 +185,7 @@ export function toMarkdown(report) {
     '|---|---|---|---|',
     ...rows,
     '',
+    ...(cases.length ? ['## Test cases', '', ...cases] : []),
     ...(reviews.length ? ['## What the testers said', '', ...reviews] : []),
   ].join('\n')
 }
@@ -185,6 +201,8 @@ export function toText(report) {
   for (const agent of report.agents) {
     lines.push(`${MARK[agent.status]} ${agent.persona.padEnd(13)} ${agent.line}`)
     if (agent.cause?.frontend) lines.push(`   ${''.padEnd(13)} → ${agent.cause.frontend.file}:${agent.cause.frontend.line}`)
+    const failedStep = agent.testSteps?.findIndex((step) => step.status === 'failed') ?? -1
+    if (failedStep >= 0) lines.push(`   ${''.padEnd(13)} ✕ step ${failedStep + 1}: ${agent.testSteps[failedStep].do} (expected: ${agent.testSteps[failedStep].expect})`)
     if (agent.review) lines.push(`   ${''.padEnd(13)} ${stars(agent.review.rating)} "${agent.review.review}"`)
   }
   if (report.overall) lines.push('', report.overall)
