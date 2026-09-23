@@ -108,18 +108,31 @@ window.NexusReel = (function () {
     note('');
   }
 
+  /** The two nodes #tp-time is made of, created on first use and then reused. */
+  function clockNodes() {
+    if (!dom.clock) {
+      dom.time.textContent = '';
+      var elapsed = document.createElement('b');
+      var total = document.createTextNode('');
+      dom.time.appendChild(elapsed);
+      dom.time.appendChild(total);
+      dom.clock = { elapsed: elapsed, total: total };
+    }
+    return dom.clock;
+  }
+
   function tick() {
     if (!comp) return;
     var progress = comp.tl.progress();
     var time = comp.tl.time();
     dom.range.value = String(Math.round(progress * 1000));
     dom.fill.style.width = (progress * 100) + '%';
-    // Elapsed carries the weight; the total is only there to give it scale.
-    dom.time.textContent = '';
-    var elapsed = document.createElement('b');
-    elapsed.textContent = clock(time);
-    dom.time.appendChild(elapsed);
-    dom.time.appendChild(document.createTextNode(' / ' + clock(comp.total)));
+    // Elapsed carries the weight; the total is only there to give it scale. Both nodes are
+    // built once by clockNodes: this runs on every animation frame, and rebuilding two nodes
+    // sixty times a second to change two strings is work the browser has to undo.
+    var parts = clockNodes();
+    parts.elapsed.textContent = clock(time);
+    parts.total.nodeValue = ' / ' + clock(comp.total);
     markActive(time);
   }
 

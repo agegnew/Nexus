@@ -243,7 +243,12 @@ body {
  * as a row of dots. The film really is a sequence of scenes, so the segmentation is
  * information: a glance says how many scenes there are and which one is playing.
  */
-.tp__ticks { position: absolute; left: 0; right: 0; top: 50%; height: 6px; margin-top: -3px; }
+.tp__ticks {
+  position: absolute; left: 0; right: 0; top: 50%;
+  height: 6px; margin-top: -3px;
+  /* Decoration over the only hit target there is, so it must not take the click. */
+  pointer-events: none;
+}
 .tp__tick {
   position: absolute; top: 0;
   width: 2px; height: 6px; margin-left: -1px;

@@ -110,8 +110,10 @@
         <div class="tp__scrub">
           <div class="tp__track">
             <div class="tp__fill" id="tp-fill"></div>
-            <div class="tp__ticks" id="tp-ticks"></div>
           </div>
+          <!-- Outside the track on purpose: the track clips to 6px so the fill keeps the
+               trough's rounded ends, and the playing scene's mark is taller than that. -->
+          <div class="tp__ticks" id="tp-ticks"></div>
           <input class="tp__range" id="tp-range" type="range"
                  min="0" max="1000" step="1" value="0" aria-label="Seek through the reel"/>
         </div>
