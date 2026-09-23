@@ -1,6 +1,7 @@
 package com.example.yasinreel.render
 
 import com.example.MyToolWindowFactory
+import com.example.trust.TrustToolWindowFactory
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.Project
@@ -43,10 +44,29 @@ class NexusToolWindowFactory : ToolWindowFactory, DumbAware {
         ReelServer.getInstance().serveMapOnVitePort()
 
         runCatching { MyToolWindowFactory().createToolWindowContent(project, toolWindow) }
+            .onSuccess { nameLastTab(toolWindow, VISUALIZER_TAB) }
             .onFailure { logger.warn("Nexus could not build the $VISUALIZER_TAB view", it) }
+
+        // Trust is the one view that is not a web page. It reads a coverage report and paints
+        // the project as a treemap in Swing, so it cannot be a panel in the page above and has
+        // to stay a tab of its own. Guarded like the delegate, so a fault here costs this tab
+        // and not the whole window.
+        runCatching { TrustToolWindowFactory().createToolWindowContent(project, toolWindow) }
+            .onSuccess { nameLastTab(toolWindow, TRUST_TAB) }
+            .onFailure { logger.warn("Nexus could not build the $TRUST_TAB tab", it) }
+    }
+
+    /**
+     * Both factories create their content with an empty display name, which is correct
+     * when a window holds one thing and useless when it holds two. The delegate has just
+     * appended its own content, so the last one is the one to label.
+     */
+    private fun nameLastTab(toolWindow: ToolWindow, title: String) {
+        toolWindow.contentManager.contents.lastOrNull()?.displayName = title
     }
 
     private companion object {
         const val VISUALIZER_TAB = "Map"
+        const val TRUST_TAB = "Trust"
     }
 }

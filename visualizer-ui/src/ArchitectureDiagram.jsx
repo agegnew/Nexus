@@ -104,6 +104,52 @@ function plural(count, singular, multiple = `${singular}s`) {
   return `${count} ${count === 1 ? singular : multiple}`
 }
 
+// Green through amber to red, matching the Trust tab exactly. The map and the tab are one
+// claim shown two ways, and the moment their reds drift apart the eye stops believing them.
+function trustColour(percent) {
+  const stops = [[62, 122, 78], [184, 134, 59], [196, 68, 58]]
+  const t = Math.min(Math.max(percent, 0), 100) / 100
+  const [from, to, k] = t < 0.5 ? [stops[0], stops[1], t / 0.5] : [stops[1], stops[2], (t - 0.5) / 0.5]
+  const channel = (i) => Math.round(from[i] + (to[i] - from[i]) * k)
+  return `rgb(${channel(0)}, ${channel(1)}, ${channel(2)})`
+}
+
+// Sums a component's files into one reading. Returns null when nothing is known about any of
+// them, which is what keeps the diagram unchanged for projects with no coverage report.
+function trustOf(paths, trust) {
+  if (!trust?.files || !paths?.length) return null
+  let never = 0
+  let total = 0
+  let known = 0
+  for (const path of paths) {
+    const hit = trust.files[path]
+    if (!hit) continue
+    known += 1
+    never += hit[0]
+    total += hit[1]
+  }
+  if (known === 0 || total <= 0) return null
+  return { never, total, percent: Math.round((never * 100) / total) }
+}
+
+function TrustBar({ reading }) {
+  if (!reading) return null
+  return (
+    <span
+      className="architecture-trust"
+      title={`${reading.never} of ${reading.total} executable lines have never been executed`}
+    >
+      <span className="architecture-trust__track">
+        <span
+          className="architecture-trust__fill"
+          style={{ width: `${reading.percent}%`, background: trustColour(reading.percent) }}
+        />
+      </span>
+      <small>{reading.percent}% never run</small>
+    </span>
+  )
+}
+
 function architectureSummary(analysis) {
   const nodesById = new Map(analysis.nodes.map((node) => [node.id, node]))
   const frontend = analysis.nodes.filter((node) => node.kind === 'frontend')
@@ -114,6 +160,7 @@ function architectureSummary(analysis) {
     nodesById.get(edge.source)?.kind === 'frontend'
     && nodesById.get(edge.target)?.kind === 'endpoint'
   )).length
+  const pathsOf = (nodes) => [...new Set(nodes.map((node) => node.filePath).filter(Boolean))]
   const services = [...backend.reduce((groups, node) => {
     const technology = node.technology || 'Backend'
     const current = groups.get(technology) ?? { name: technology, handlers: 0, files: new Set() }
@@ -121,11 +168,13 @@ function architectureSummary(analysis) {
     if (node.filePath) current.files.add(node.filePath)
     groups.set(technology, current)
     return groups
-  }, new Map()).values()]
+  }, new Map()).values()].map((service) => ({ ...service, files: [...service.files] }))
 
   return {
     features: clientFeatures(analysis),
     routes: interfaceRoutes(analysis),
+    frontendPaths: pathsOf(frontend),
+    endpointPaths: pathsOf(endpoints),
     frontendCalls: frontend.length,
     frontendFiles: new Set(frontend.map((node) => node.filePath).filter(Boolean)).size,
     endpoints: endpoints.length,
@@ -136,12 +185,14 @@ function architectureSummary(analysis) {
   }
 }
 
-export default function ArchitectureDiagram({ analysis }) {
+export default function ArchitectureDiagram({ analysis, trust }) {
   const workspaceRef = useRef(null)
   const [zoom, setZoom] = useState(1)
   const summary = useMemo(() => architectureSummary(analysis), [analysis])
   const features = useMemo(() => capped(summary.features, FEATURE_ROWS), [summary.features])
   const routes = useMemo(() => capped(summary.routes, ROUTE_ROWS), [summary.routes])
+  const frontendTrust = useMemo(() => trustOf(summary.frontendPaths, trust), [summary, trust])
+  const apiTrust = useMemo(() => trustOf(summary.endpointPaths, trust), [summary, trust])
   const serviceCount = Math.max(summary.services.length, 1)
   const serviceGap = Math.min(112, 250 / serviceCount)
   const serviceStart = 350 - ((serviceCount - 1) * serviceGap) / 2
@@ -213,6 +264,7 @@ export default function ArchitectureDiagram({ analysis }) {
                 ))}
                 {features.more > 0 && <li className="zone-list__more">{features.more} more</li>}
               </ul>
+              <TrustBar reading={frontendTrust} />
             </section>
 
             <section className="architecture-zone architecture-zone--interface" aria-label="Interface layer">
@@ -234,6 +286,7 @@ export default function ArchitectureDiagram({ analysis }) {
                 ))}
                 {routes.more > 0 && <li className="zone-list__more">{routes.more} more</li>}
               </ul>
+              <TrustBar reading={apiTrust} />
             </section>
 
             <section className="architecture-zone architecture-zone--services" aria-label="Service layer">
@@ -259,6 +312,7 @@ export default function ArchitectureDiagram({ analysis }) {
                   <Glyph name={glyphForTechnology(service.name)} className="architecture-component__icon" />
                   <strong>{service.name}</strong>
                   <small>{plural(service.handlers, 'handler')}</small>
+                  <TrustBar reading={trustOf(service.files, trust)} />
                 </article>
               )) : (
                 <article className="architecture-component architecture-component--service architecture-component--empty">
@@ -326,6 +380,7 @@ export default function ArchitectureDiagram({ analysis }) {
         <span><i className="architecture-key__api" />Interface</span>
         <span><i className="architecture-key__backend" />Service</span>
         {summary.unresolved > 0 && <span><i className="architecture-key__unresolved" />External</span>}
+        {trust?.files && <span><i className="architecture-key__trust" />Bar shows code never executed</span>}
       </div>
     </section>
   )
