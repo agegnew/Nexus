@@ -1,51 +1,24 @@
-# Nexus Demo App
+# Harbor Market (Nexus demo app)
 
-A deliberately small full-stack app used to demonstrate the Nexus plugin.
+A small coffee-shop app the Nexus Swarm tests on stage. It is a React front end (`web/`, port 5174)
+and a FastAPI back end (`backend/`, port 8000).
 
-Open **this folder** as a project in the sandbox IDE, then open
-**View → Tool Windows → Nexus**. Analysis finishes in seconds because there is
-no `node_modules` here.
+Three bugs are left in on purpose, so the demo finds something real every time:
 
-## What Nexus should find
-
-| Metric | Expected |
-|---|---|
-| Frontend API calls | **6** |
-| Backend endpoints | **6** |
-| Matched (wired) calls | **4** |
-| Broken wires (frontend call with no backend) | **2** |
-| Ghost routes (backend nobody calls) | **2** |
-
-## The wiring
-
-| Frontend | Call | Backend |
+| Where | Bug | What the swarm sees |
 |---|---|---|
-| `UserList.tsx` | `GET /api/users` | `users.list_users()` |
-| `UserList.tsx` | `GET /api/users/{id}` | `users.get_user()` |
-| `OrderPage.tsx` | `GET /api/orders` | `orders.list_orders()` |
-| `OrderPage.tsx` | `POST /api/orders` | `orders.create_order()` |
-| `Settings.tsx` | `PUT /api/users/{id}/settings` | **nothing — broken wire** |
-| `Analytics.tsx` | `GET /api/analytics/summary` | **nothing — broken wire** |
+| `web/src/Settings.tsx` | Calls `PUT /api/users/{id}/settings`, which the backend never declares | Save does nothing, request returns 404 |
+| `web/src/Analytics.tsx` | Calls `GET /api/analytics/summary`, which does not exist, then reads `.toFixed` on the error | The whole page crashes |
+| `web/src/OrderPage.tsx` | Sends `parseInt("")` (NaN, so `null`) and shows the 422 error body as if it were an order | "Order #undefined placed" |
 
-Ghost routes (exist in the backend, no screen calls them):
+The Nexus Map also shows these as broken wires, plus two ghost routes (`GET /health` and
+`DELETE /api/users/{user_id}`).
 
-- `DELETE /api/users/{user_id}` in `backend/app/users.py`
-- `GET /health` in `backend/app/main.py`
+## Run it
 
-## Why the broken ones are there
+Windows: `./start.ps1`. macOS/Linux: `./start.sh`. Or run it by hand:
 
-They are the point of the demo. Nexus never invents a relationship: a call it
-cannot resolve is shown as unresolved rather than quietly hidden, and an
-endpoint nobody calls is shown as dead code. Both are real bugs this kind of
-map is supposed to surface.
-
-## Running it for real (optional)
-
-The demo does not need to run — Nexus reads the source, it does not execute it.
-If you want a live server anyway:
-
-```bash
-cd backend
-pip install -r requirements.txt
-uvicorn app.main:app --reload
+```
+cd backend && pip install -r requirements.txt && python -m uvicorn app.main:app --port 8000
+cd web && npm install && npm run dev        # http://localhost:5174
 ```

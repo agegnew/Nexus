@@ -1,0 +1,48 @@
+{
+  "projectName": "nexus-demo-app",
+  "projectPath": "C:/dev/nexus-demo-app",
+  "status": "ready",
+  "message": "Static analysis completed.",
+  "stats": {
+    "scannedFiles": 11,
+    "frontendCalls": 6,
+    "backendEndpoints": 6,
+    "matchedCalls": 4
+  },
+  "nodes": [
+    { "id": "route-0", "kind": "endpoint", "label": "GET /health", "subtitle": "FastAPI endpoint", "technology": "FastAPI" },
+    { "id": "backend-0", "kind": "backend", "label": "main.health()", "subtitle": "backend/app/main.py:13", "technology": "FastAPI", "filePath": "backend/app/main.py", "line": 13 },
+    { "id": "route-1", "kind": "endpoint", "label": "GET /api/orders", "subtitle": "FastAPI endpoint", "technology": "FastAPI" },
+    { "id": "backend-1", "kind": "backend", "label": "orders.list_orders()", "subtitle": "backend/app/orders.py:16", "technology": "FastAPI", "filePath": "backend/app/orders.py", "line": 16 },
+    { "id": "route-2", "kind": "endpoint", "label": "POST /api/orders", "subtitle": "FastAPI endpoint", "technology": "FastAPI" },
+    { "id": "backend-2", "kind": "backend", "label": "orders.create_order()", "subtitle": "backend/app/orders.py:21", "technology": "FastAPI", "filePath": "backend/app/orders.py", "line": 21 },
+    { "id": "route-3", "kind": "endpoint", "label": "GET /api/users", "subtitle": "FastAPI endpoint", "technology": "FastAPI" },
+    { "id": "backend-3", "kind": "backend", "label": "users.list_users()", "subtitle": "backend/app/users.py:14", "technology": "FastAPI", "filePath": "backend/app/users.py", "line": 14 },
+    { "id": "route-4", "kind": "endpoint", "label": "GET /api/users/{user_id}", "subtitle": "FastAPI endpoint", "technology": "FastAPI" },
+    { "id": "backend-4", "kind": "backend", "label": "users.get_user()", "subtitle": "backend/app/users.py:19", "technology": "FastAPI", "filePath": "backend/app/users.py", "line": 19 },
+    { "id": "route-5", "kind": "endpoint", "label": "DELETE /api/users/{user_id}", "subtitle": "FastAPI endpoint", "technology": "FastAPI" },
+    { "id": "backend-5", "kind": "backend", "label": "users.delete_user()", "subtitle": "backend/app/users.py:28", "technology": "FastAPI", "filePath": "backend/app/users.py", "line": 28 },
+    { "id": "unmatched-0", "kind": "unmatched", "label": "GET /api/analytics/summary", "subtitle": "No matching backend endpoint" },
+    { "id": "frontend-0", "kind": "frontend", "label": "Analytics.tsx", "subtitle": "web/src/Analytics.tsx:8", "filePath": "web/src/Analytics.tsx", "line": 8 },
+    { "id": "frontend-1", "kind": "frontend", "label": "OrderPage.tsx", "subtitle": "web/src/OrderPage.tsx:11", "filePath": "web/src/OrderPage.tsx", "line": 11 },
+    { "id": "frontend-2", "kind": "frontend", "label": "OrderPage.tsx", "subtitle": "web/src/OrderPage.tsx:16", "filePath": "web/src/OrderPage.tsx", "line": 16 },
+    { "id": "unmatched-3", "kind": "unmatched", "label": "PUT /api/users/{userId}/settings", "subtitle": "No matching backend endpoint" },
+    { "id": "frontend-3", "kind": "frontend", "label": "Settings.tsx", "subtitle": "web/src/Settings.tsx:13", "filePath": "web/src/Settings.tsx", "line": 13 },
+    { "id": "frontend-4", "kind": "frontend", "label": "UserList.tsx", "subtitle": "web/src/UserList.tsx:9", "filePath": "web/src/UserList.tsx", "line": 9 },
+    { "id": "frontend-5", "kind": "frontend", "label": "UserList.tsx", "subtitle": "web/src/UserList.tsx:13", "filePath": "web/src/UserList.tsx", "line": 13 }
+  ],
+  "edges": [
+    { "id": "handles-0", "source": "route-0", "target": "backend-0", "label": "handles" },
+    { "id": "handles-1", "source": "route-1", "target": "backend-1", "label": "handles" },
+    { "id": "handles-2", "source": "route-2", "target": "backend-2", "label": "handles" },
+    { "id": "handles-3", "source": "route-3", "target": "backend-3", "label": "handles" },
+    { "id": "handles-4", "source": "route-4", "target": "backend-4", "label": "handles" },
+    { "id": "handles-5", "source": "route-5", "target": "backend-5", "label": "handles" },
+    { "id": "requests-0", "source": "frontend-0", "target": "unmatched-0", "label": "GET" },
+    { "id": "requests-1", "source": "frontend-1", "target": "route-1", "label": "GET" },
+    { "id": "requests-2", "source": "frontend-2", "target": "route-2", "label": "POST" },
+    { "id": "requests-3", "source": "frontend-3", "target": "unmatched-3", "label": "PUT" },
+    { "id": "requests-4", "source": "frontend-4", "target": "route-3", "label": "GET" },
+    { "id": "requests-5", "source": "frontend-5", "target": "route-4", "label": "GET" }
+  ]
+}

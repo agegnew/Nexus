@@ -14,6 +14,7 @@ import { DEMO_FIXTURES, demoGraph, demoIdFromParams } from './demo'
 import { PANELS, PANEL_IDS, VIEWS, findPlugin, panelSrc } from './nexusPanels'
 
 const ArchitectureDiagram = lazy(() => import('./ArchitectureDiagram'))
+const SwarmView = lazy(() => import('./views/SwarmView'))
 
 const ROOT_ID = 'project-root'
 const HORIZONTAL_GAP = 300
@@ -259,7 +260,13 @@ export default function App() {
   ))
   const [expandedIds, setExpandedIds] = useState(() => new Set([ROOT_ID]))
   const [flowInstance, setFlowInstance] = useState(null)
-  const [activeView, setActiveView] = useState('code')
+  // ?view=deck opens straight into that view, which is how the demo runbook reaches one
+  // without three clicks. Checked against the row itself, so a view cannot be deep linked
+  // to after it has been taken out of the product.
+  const [activeView, setActiveView] = useState(() => {
+    const asked = projectParams.get('view')
+    return VIEWS.some((view) => view.id === asked) ? asked : 'code'
+  })
   const [trust, setTrust] = useState(() => window.__CODE_VISUALIZER_TRUST__ ?? null)
   // null while we are still asking, then a base URL, then false when nothing answered.
   const [pluginBase, setPluginBase] = useState(null)
@@ -411,6 +418,16 @@ export default function App() {
           />
         </section>
       ))}
+
+      {activeView === 'swarm' && (
+        <Suspense fallback={(
+          <section className="activity-workspace">
+            <div className="activity"><div className="activity__state" role="status"><strong>Loading</strong></div></div>
+          </section>
+        )}>
+          <SwarmView analysis={analysis} />
+        </Suspense>
+      )}
 
       {activeView === 'code' && <section className="tree-workspace" aria-label="Application code tree">
         <ReactFlow

@@ -1,29 +1,38 @@
 import { useState } from 'react'
+import { http } from './api'
 
-/**
- * Saves a user's settings.
- *
- * BROKEN ON PURPOSE: the backend never implemented
- * PUT /api/users/{user_id}/settings, so this call has nowhere to land.
- * Nexus shows it as an unresolved request instead of pretending it works.
- */
-export function Settings({ userId }: { userId: string }) {
-  const [theme, setTheme] = useState('dark')
+const userId = 3
+
+export default function Settings() {
+  const [newsletter, setNewsletter] = useState(true)
+  const [nickname, setNickname] = useState('Grace')
+  const [status, setStatus] = useState('')
 
   async function save() {
-    await fetch(`/api/users/${userId}/settings`, {
+    setStatus('Saving…')
+    const result = await http<{ saved?: boolean }>(`/api/users/${userId}/settings`, {
       method: 'PUT',
-      body: JSON.stringify({ theme }),
+      body: JSON.stringify({ newsletter, nickname }),
     })
+    if (result.saved) setStatus('Settings saved')
   }
 
   return (
-    <form onSubmit={save}>
-      <select value={theme} onChange={(event) => setTheme(event.target.value)}>
-        <option value="dark">Dark</option>
-        <option value="light">Light</option>
-      </select>
-      <button type="submit">Save</button>
-    </form>
+    <section className="page">
+      <h1>Settings</h1>
+      <p className="lede">How the harbor should talk to you.</p>
+      <div className="card form">
+        <label>
+          Nickname
+          <input value={nickname} onChange={(event) => setNickname(event.target.value)} />
+        </label>
+        <label className="check">
+          <input type="checkbox" checked={newsletter} onChange={(event) => setNewsletter(event.target.checked)} />
+          Send me the weekly newsletter
+        </label>
+        <button type="button" className="primary" onClick={save}>Save settings</button>
+        {status && <p className="status" role="status">{status}</p>}
+      </div>
+    </section>
   )
 }

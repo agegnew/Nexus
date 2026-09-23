@@ -1,20 +1,25 @@
-import axios from 'axios'
 import { useEffect, useState } from 'react'
+import { http, type Summary } from './api'
 
-/**
- * Dashboard tile.
- *
- * BROKEN ON PURPOSE: there is no analytics service in this project at all,
- * so GET /api/analytics/summary resolves to nothing.
- */
-export function Analytics() {
-  const [revenue, setRevenue] = useState(0)
+export default function Analytics() {
+  const [summary, setSummary] = useState<Summary | null>(null)
 
   useEffect(() => {
-    axios.get('/api/analytics/summary').then((response) => {
-      setRevenue(response.data.revenue)
-    })
+    http<Summary>('/api/analytics/summary').then(setSummary)
   }, [])
 
-  return <strong>Revenue: {revenue}</strong>
+  if (!summary) return <section className="page"><h1>Analytics</h1><p className="lede">Loading…</p></section>
+
+  return (
+    <section className="page">
+      <h1>Analytics</h1>
+      <div className="stats">
+        <div className="card"><span>Revenue</span><strong>£{summary.revenue.toFixed(2)}</strong></div>
+        <div className="card"><span>Orders</span><strong>{summary.orders}</strong></div>
+      </div>
+      <ul className="list">
+        {summary.topItems.map((top) => <li key={top.item}>{top.item} · {top.count}</li>)}
+      </ul>
+    </section>
+  )
 }

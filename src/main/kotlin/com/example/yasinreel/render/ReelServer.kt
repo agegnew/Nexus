@@ -386,7 +386,17 @@ class ReelServer : Disposable {
          * Asked for first, so `vite.config.js` has something to proxy to. Not reserved by
          * IANA and one past the dev server's own, which keeps the pair obvious.
          */
-        private const val PREFERRED_PORT = 5174
+        /**
+         * Ours, and deliberately not a port anyone else is likely to want.
+         *
+         * This was 5174, which is Vite's default plus one, and that is exactly the port the
+         * second dev server on any machine ends up on. The swarm's demo app is one: it pins
+         * 5174 with strictPort, so with this plugin open first that app could not start at all.
+         * The fallback to a spare port meant the plugin always survived the clash and the other
+         * program never did, which is the wrong way round for a port we chose for our own
+         * convenience.
+         */
+        private const val PREFERRED_PORT = 5199
 
         /**
          * Code both tabs load, and the reason the date range means one thing in this plugin.

@@ -40,6 +40,12 @@ export function requestActivity({ since, until, scope, mine, uncommitted }) {
   })
 }
 
+// Asks the IDE to start the swarm runner (or report the one already running). The answer
+// arrives on 'code-visualizer:swarm' as { ok, port, brain } or { ok: false, error }.
+export function connectSwarm() {
+  return post({ type: 'swarm-connect' })
+}
+
 export function subscribe({ onGraph, onStatus, onHost, onActivity, onActivityMeta, onTrust }) {
   const graph = (event) => onGraph(event.detail)
   const status = (event) => onStatus(event.detail?.state)

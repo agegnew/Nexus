@@ -56,9 +56,18 @@ export const VIEWS = [
     path: 'trust/index.html',
     blurb: 'Which of this codebase has never been executed.',
   },
+  {
+    id: 'swarm',
+    label: 'Swarm',
+  },
 ]
 
-/** The views that are the plugin's own pages, and therefore arrive in an iframe. */
+/**
+ * The views that are the plugin's own pages, and therefore arrive in an iframe.
+ *
+ * Code tree, Architecture and Swarm are React and are drawn by this app; the rest are served
+ * by the plugin. Having the one list say which is which is the whole reason it is one list.
+ */
 export const PANELS = VIEWS.filter((view) => view.path)
 
 export const PANEL_IDS = PANELS.map((panel) => panel.id)

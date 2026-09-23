@@ -2,6 +2,7 @@ package com.example
 
 import com.example.activity.ActivityRequest
 import com.example.activity.ActivityService
+import com.example.swarm.SwarmService
 import com.example.trust.TrustGraphBridge
 import com.google.gson.Gson
 import com.google.gson.JsonParser
@@ -138,11 +139,40 @@ class MyToolWindowFactory : ToolWindowFactory {
                 mine = message.get("mine")?.asBoolean ?: true,
                 includeUncommitted = message.get("uncommitted")?.asBoolean ?: true
             )
+            "swarm-connect" -> connectSwarm(project, browser)
             "open" -> {
                 val path = message.get("filePath")?.asString ?: return
                 val line = message.get("line")?.takeIf { !it.isJsonNull }?.asInt ?: 1
                 ApplicationManager.getApplication().invokeLater({ openSource(project, path, line) }, ModalityState.any())
             }
+        }
+    }
+
+    /**
+     * Starts the swarm runner if it is not running yet and tells the page its port. Starting can
+     * take a few seconds (Node, then Playwright), so it happens off the UI thread.
+     */
+    private fun connectSwarm(project: Project, browser: JBCefBrowser) {
+        AppExecutorUtil.getAppExecutorService().execute {
+            if (project.isDisposed) return@execute
+            val result = SwarmService.getInstance(project).ensureRunning()
+            val detail = gson.toJson(
+                result.fold(
+                    onSuccess = { mapOf("ok" to true, "port" to it.port, "brain" to it.brain) },
+                    onFailure = {
+                        logger.warn("Nexus Swarm could not start", it)
+                        mapOf("ok" to false, "error" to (it.message ?: "The swarm runner could not start."))
+                    }
+                )
+            )
+            ApplicationManager.getApplication().invokeLater({
+                if (project.isDisposed) return@invokeLater
+                browser.cefBrowser.executeJavaScript(
+                    "window.dispatchEvent(new CustomEvent('code-visualizer:swarm', { detail: $detail }));",
+                    browser.cefBrowser.url,
+                    0
+                )
+            }, ModalityState.any())
         }
     }
 

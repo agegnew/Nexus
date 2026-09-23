@@ -28,9 +28,14 @@
   secondary text and one accent) rather than as a bag of colours, resolving oklch, oklab,
   hsl and rgba to sRGB so that a .pptx, which has no colour space but sRGB, can hold it.
 
+- Swarm: five agents drive the running app in a real browser, in parallel, each working a
+  written test case step by step, and write up what broke. It is the last view in the row.
+  The runner is Node, started by the IDE on demand and handed the key from Settings, so
+  nothing is typed into a terminal to use it.
+
 ### Changed
 
-- One row of five views, and Trust is in it. Trust was a second tab on the side of the
+- One row of six views, and Trust is in it. Trust was a second tab on the side of the
   window, which put one view on a different shelf from the other four for a reason that was
   true of the implementation, it was Swing and they are web pages, and meaningless to
   anyone using it. It is a panel now, after Deck, drawn from a layout the plugin computes
@@ -38,6 +43,9 @@
   cannot disagree about where a file is or what colour it should be. Selecting a folder,
   dead-only mode, the editor paint switch and the one button that runs the project with
   coverage all work from there.
+- The plugin's own HTTP server asks for port 5199 rather than 5174. 5174 is where the second
+  Vite dev server on a machine lands, and the demo app pins it, so with the plugin open first
+  that app could not start at all.
 - Activity is no longer in the row. Its code, its endpoint and its summariser are untouched;
   it simply is not one of the views offered.
 - The row is one declared list rather than two hardcoded buttons and a mapped array. The

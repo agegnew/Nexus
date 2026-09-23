@@ -87,7 +87,7 @@ class UiStructureTest {
         val root = File("visualizer-ui")
         if (!root.isDirectory) return
         val ui = UiStructureHarvester.from(sourcesOf(root), anyDesign)
-        assertEquals(listOf("Code tree", "Architecture", "Reel", "Deck", "Trust"), labels(ui))
+        assertEquals(listOf("Code tree", "Architecture", "Reel", "Deck", "Trust", "Swarm"), labels(ui))
     }
 
     @Test
