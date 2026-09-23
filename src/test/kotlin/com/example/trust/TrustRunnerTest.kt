@@ -66,6 +66,21 @@ class TrustRunnerTest {
     }
 
     @Test
+    fun `a failing test must not stop the report from being written`() {
+        val py = temp.newFolder("py")
+        file(py, "requirements.txt", "")
+        val js = temp.newFolder("js")
+        file(js, "package.json", """{ "devDependencies": { "vitest": "^4" } }""")
+
+        // pytest exits non-zero on any failure; && would skip the xml step entirely.
+        val python = TrustRunner.commandFor(py)!!.command
+        assertTrue(python, python.contains("; ") && !python.contains("&&"))
+
+        // vitest writes no report on failure unless told to.
+        assertTrue(TrustRunner.commandFor(js)!!.command.contains("--coverage.reportOnFailure"))
+    }
+
+    @Test
     fun `an unrecognised project gets no guess rather than a wrong one`() {
         val root = temp.newFolder("project")
         file(root, "build.gradle.kts", "plugins {}")
