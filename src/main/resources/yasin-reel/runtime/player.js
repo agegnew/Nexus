@@ -114,7 +114,12 @@ window.NexusReel = (function () {
     var time = comp.tl.time();
     dom.range.value = String(Math.round(progress * 1000));
     dom.fill.style.width = (progress * 100) + '%';
-    dom.time.textContent = clock(time) + ' / ' + clock(comp.total);
+    // Elapsed carries the weight; the total is only there to give it scale.
+    dom.time.textContent = '';
+    var elapsed = document.createElement('b');
+    elapsed.textContent = clock(time);
+    dom.time.appendChild(elapsed);
+    dom.time.appendChild(document.createTextNode(' / ' + clock(comp.total)));
     markActive(time);
   }
 

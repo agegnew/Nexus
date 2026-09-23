@@ -118,21 +118,33 @@
 
         <span class="tp__time" id="tp-time">0:00 / 0:00</span>
 
-        <!-- Labelled with the single word the user went looking for and did not find. -->
-        <div class="tp__export">
-          <button class="tp__chip" id="tp-export" type="button"
-                  aria-haspopup="true" aria-expanded="false">Export</button>
-          <div class="tp__menu" id="tp-export-menu" hidden role="menu">
-            <button type="button" role="menuitem" data-format="html">Standalone page (.html)<small>Plays anywhere, nothing to install</small></button>
-            <button type="button" role="menuitem" data-format="mp4" disabled>Video (.mp4)<small id="tp-export-mp4-why">Checking this machine...</small></button>
+        <!--
+          Grouped by what each control does, not by the order they were added. The grid
+          treats this as one cell, so a narrow tool window moves the whole group to its
+          own row instead of spilling "Back" underneath the play button on its own.
+        -->
+        <div class="tp__actions">
+          <!-- Labelled with the single word the user went looking for and did not find. -->
+          <div class="tp__export">
+            <button class="tp__chip tp__chip--action" id="tp-export" type="button"
+                    aria-haspopup="true" aria-expanded="false">Export</button>
+            <div class="tp__menu" id="tp-export-menu" hidden role="menu">
+              <button type="button" role="menuitem" data-format="html">Standalone page (.html)<small>Plays anywhere, nothing to install</small></button>
+              <button type="button" role="menuitem" data-format="mp4" disabled>Video (.mp4)<small id="tp-export-mp4-why">Checking this machine...</small></button>
+            </div>
           </div>
-        </div>
 
-        <button class="tp__chip" id="tp-cc" type="button" aria-pressed="true"
-                title="Show or hide the narration captions">CC</button>
-        <button class="tp__chip" id="tp-mute" type="button" aria-pressed="false" hidden
-                title="Mute or unmute the narration">Sound</button>
-        <button class="tp__chip" id="tp-back" type="button">Back</button>
+          <!-- The two things that stay on or off, side by side, reading as one switch. -->
+          <div class="tp__toggles">
+            <button class="tp__chip tp__chip--toggle" id="tp-cc" type="button" aria-pressed="true"
+                    title="Show or hide the narration captions">CC</button>
+            <button class="tp__chip tp__chip--toggle" id="tp-mute" type="button" aria-pressed="false" hidden
+                    title="Mute or unmute the narration">Sound</button>
+          </div>
+
+          <!-- Leaves the player, so it is kept quiet and kept apart from the toggles. -->
+          <button class="tp__chip tp__chip--quiet" id="tp-back" type="button">Back</button>
+        </div>
       </div>
 
       <p class="tp__now">
