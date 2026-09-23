@@ -59,7 +59,15 @@ body {
 }
 .reel__project { font-size: 13px; color: var(--text-secondary); font-weight: 600; }
 
+/*
+ * Centred in whatever height is left, because the choice is the only thing on this
+ * screen. Pinned to the top it left a tall empty panel underneath that read as a
+ * page still loading. "safe" so a short window scrolls from the top instead of
+ * clipping the first cut.
+ */
 .picker {
+  flex: 1;
+  align-content: safe center;
   padding: var(--space-xl) var(--space-lg);
   display: grid;
   gap: var(--space-lg);
@@ -132,106 +140,230 @@ body {
 
 .reel--playing { height: 100vh; }
 
-.transport { display: flex; flex-direction: column; gap: 6px; }
-.tp__row { display: flex; align-items: center; gap: var(--space-md); flex-wrap: wrap; }
+/*
+ * One surface rather than controls scattered on the page. A film transport is a single
+ * instrument, and grouping it also separates the chrome from the film above it, which
+ * matters when both are light.
+ */
+.transport {
+  display: grid;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: var(--surface-raised);
+  box-shadow: 0 1px 2px rgba(13, 21, 38, .04);
+}
 
+/*
+ * A named grid, not flex-wrap. At tool-window widths the old wrap dropped "Back" onto
+ * a line of its own, left-aligned under the play button, which read as a bug. Naming
+ * the zones makes the narrow layout a deliberate stack instead of a spill.
+ */
+.tp__row {
+  display: grid;
+  grid-template-columns: auto minmax(80px, 1fr) auto auto;
+  grid-template-areas: 'play scrub time actions';
+  align-items: center;
+  gap: var(--space-md);
+}
+.tp__play { grid-area: play; }
+.tp__scrub { grid-area: scrub; }
+.tp__time { grid-area: time; }
+.tp__actions { grid-area: actions; display: flex; align-items: center; gap: 8px; }
+.tp__toggles { display: flex; align-items: center; gap: 4px; }
+
+/* Below this the four zones cannot share a line without crushing the timeline. */
+@media (max-width: 720px) {
+  .tp__row {
+    grid-template-columns: auto 1fr auto;
+    grid-template-areas:
+      'play scrub time'
+      'actions actions actions';
+    row-gap: 12px;
+  }
+  .tp__actions { width: 100%; justify-content: space-between; }
+}
+
+/*
+ * The only filled control in the window. It was a 30px hollow circle, which made the
+ * primary action the quietest thing on the bar; a person scanning for "how do I start
+ * this" found three identical grey pills first.
+ */
 .tp__play {
-  flex: 0 0 30px; width: 30px; height: 30px;
+  flex: 0 0 auto; width: 44px; height: 44px;
   display: grid; place-items: center;
   border-radius: 50%;
-  border: 1px solid var(--border-subtle);
-  background: var(--surface-node);
-  color: var(--text-primary);
+  border: 1px solid transparent;
+  background: var(--accent);
+  color: #FFFFFF;
   cursor: pointer;
-  transition: background .15s ease, border-color .15s ease;
+  box-shadow: 0 1px 2px rgba(13, 21, 38, .10), 0 4px 12px rgba(47, 107, 255, .22);
+  transition: background .15s ease, box-shadow .15s ease, transform .1s ease;
 }
-.tp__play:hover { background: var(--surface-hover); border-color: var(--accent); }
-.tp__play:focus-visible { outline: 2px solid var(--accent-warm); outline-offset: 2px; }
+.tp__play:hover { background: #1F57E6; box-shadow: 0 2px 4px rgba(13, 21, 38, .12), 0 6px 18px rgba(47, 107, 255, .30); }
+.tp__play:active { transform: scale(.96); }
+.tp__play:focus-visible { outline: 2px solid var(--accent-warm); outline-offset: 3px; }
 
-.tp__glyph { position: relative; display: block; width: 12px; height: 12px; }
+/* Sized against the 44px button. The triangle sits a pixel right of true centre
+   because a play mark centred by its bounding box always looks left of centre. */
+.tp__glyph { position: relative; display: block; width: 14px; height: 14px; }
 .tp__play[data-mode="play"] .tp__glyph::before {
-  content: ''; position: absolute; left: 3px; top: 0;
-  border-left: 9px solid currentColor;
-  border-top: 6px solid transparent;
-  border-bottom: 6px solid transparent;
+  content: ''; position: absolute; left: 4px; top: 0;
+  border-left: 11px solid currentColor;
+  border-top: 7px solid transparent;
+  border-bottom: 7px solid transparent;
 }
 .tp__play[data-mode="pause"] .tp__glyph::before,
 .tp__play[data-mode="pause"] .tp__glyph::after {
   content: ''; position: absolute; top: 0;
-  width: 3px; height: 12px; background: currentColor;
+  width: 4px; height: 14px; border-radius: 1px; background: currentColor;
 }
 .tp__play[data-mode="pause"] .tp__glyph::before { left: 1px; }
 .tp__play[data-mode="pause"] .tp__glyph::after { right: 1px; }
 
-.tp__scrub { position: relative; flex: 1 1 140px; height: 22px; display: flex; align-items: center; }
+/* 44px tall so the seek target meets the minimum, while the bar it draws stays 6px. */
+.tp__scrub { position: relative; flex: 1 1 140px; height: 44px; display: flex; align-items: center; }
+
+/*
+ * The trough was --surface-node, which is #FFFFFF: a white bar on a white panel, so
+ * the timeline appeared to be a hairline with debris on it. It now has a real trough.
+ */
 .tp__track {
   position: absolute; left: 0; right: 0; top: 50%;
-  height: 4px; margin-top: -2px;
-  border-radius: 2px;
-  background: var(--surface-node);
-}
-.tp__fill { height: 100%; width: 0; border-radius: 2px; background: linear-gradient(90deg, var(--accent), var(--accent-warm)); }
-.tp__ticks { position: absolute; inset: 0; }
-.tp__tick {
-  position: absolute; top: -3px;
-  width: 2px; height: 10px; margin-left: -1px;
-  border-radius: 1px;
+  height: 6px; margin-top: -3px;
+  border-radius: 3px;
   background: var(--border-subtle);
+  overflow: hidden;
 }
-.tp__tick[data-active="true"] { background: var(--accent-warm); }
+.tp__fill { height: 100%; width: 0; background: var(--accent); }
+
+/*
+ * Chapter marks cut the bar into one segment per scene instead of floating above it
+ * as a row of dots. The film really is a sequence of scenes, so the segmentation is
+ * information: a glance says how many scenes there are and which one is playing.
+ */
+.tp__ticks { position: absolute; left: 0; right: 0; top: 50%; height: 6px; margin-top: -3px; }
+.tp__tick {
+  position: absolute; top: 0;
+  width: 2px; height: 6px; margin-left: -1px;
+  background: var(--surface-raised);
+}
+/* The scene that is playing, marked where it begins rather than dimly tinted. */
+.tp__tick[data-active="true"] {
+  width: 2px; height: 12px; top: -3px;
+  border-radius: 1px;
+  background: var(--accent-warm);
+}
 
 /* The native range is kept as the only hit target, so keyboard seeking is free. */
 .tp__range {
-  position: relative; width: 100%; height: 22px; margin: 0;
+  position: relative; width: 100%; height: 44px; margin: 0;
   appearance: none; -webkit-appearance: none;
   background: transparent; cursor: pointer;
 }
-.tp__range::-webkit-slider-runnable-track { height: 22px; background: transparent; }
+.tp__range::-webkit-slider-runnable-track { height: 44px; background: transparent; }
 .tp__range::-webkit-slider-thumb {
   appearance: none; -webkit-appearance: none;
-  width: 12px; height: 12px; margin-top: 5px;
+  width: 14px; height: 14px; margin-top: 15px;
   border-radius: 50%;
-  background: var(--text-primary);
-  border: 2px solid var(--surface-base);
+  background: var(--accent);
+  border: 3px solid var(--surface-raised);
+  box-shadow: 0 1px 3px rgba(13, 21, 38, .28);
 }
-.tp__range::-moz-range-track { height: 22px; background: transparent; border: 0; }
+.tp__range::-moz-range-track { height: 44px; background: transparent; border: 0; }
 .tp__range::-moz-range-thumb {
-  width: 12px; height: 12px; border-radius: 50%;
-  background: var(--text-primary); border: 2px solid var(--surface-base);
+  width: 14px; height: 14px; border-radius: 50%;
+  background: var(--accent); border: 3px solid var(--surface-raised);
+  box-shadow: 0 1px 3px rgba(13, 21, 38, .28);
 }
 .tp__range:focus-visible { outline: 2px solid var(--accent-warm); outline-offset: 2px; border-radius: 4px; }
 
 .tp__time {
-  font-family: var(--font-code); font-size: 11px;
+  font-family: var(--font-code); font-size: 12px;
   color: var(--text-secondary);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+/* Elapsed is the number being read; total is only there for scale. */
+.tp__time b { font-weight: 500; color: var(--text-primary); }
 
+/*
+ * Three jobs, three treatments. Export opens a menu, CC and Sound stay on or off, and
+ * Back leaves the player: as identical grey pills they gave a person no way to tell a
+ * one-way action from a switch. The radius differs from the circular play button on
+ * purpose, so "transport" and "settings" do not read as the same kind of control.
+ */
 .tp__chip {
-  font: inherit; font-size: 11px;
-  padding: 4px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--border-subtle);
-  background: var(--surface-node);
+  font: inherit; font-size: 12px; line-height: 1;
+  min-height: 32px; padding: 0 12px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
+  white-space: nowrap;
   transition: background .15s ease, color .15s ease, border-color .15s ease;
 }
-.tp__chip:hover { background: var(--surface-hover); color: var(--text-primary); border-color: var(--accent); }
 .tp__chip:focus-visible { outline: 2px solid var(--accent-warm); outline-offset: 2px; }
-.tp__chip[aria-pressed="false"] { opacity: .5; }
 
-.tp__now { margin: 0; display: flex; gap: 8px; min-height: 15px; font-size: 11px; }
-.tp__chapter { color: var(--text-secondary); }
-.tp__note { color: var(--accent); }
+/* The one thing here that produces a file. Given a border so it reads as a button. */
+.tp__chip--action {
+  border-color: var(--border-subtle);
+  background: var(--surface-node);
+  color: var(--text-primary);
+  font-weight: 500;
+}
+.tp__chip--action:hover { background: var(--surface-hover); border-color: var(--accent); }
+.tp__chip--action[aria-expanded="true"] { border-color: var(--accent); color: var(--accent); }
+
+/* Switches. State is carried by fill and text colour, never by opacity alone. */
+.tp__toggles {
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--surface-base);
+  border: 1px solid var(--border-subtle);
+}
+.tp__chip--toggle { min-height: 28px; padding: 0 10px; font-weight: 500; }
+.tp__chip--toggle[aria-pressed="true"] {
+  background: var(--surface-raised);
+  color: var(--accent);
+  box-shadow: 0 1px 2px rgba(13, 21, 38, .10);
+}
+/* --text-secondary, not --text-muted: muted measured 3.41:1 on this background, which
+   is under the 4.5:1 a 12px label needs. An off switch still has to be readable. */
+.tp__chip--toggle[aria-pressed="false"] { color: var(--text-secondary); }
+.tp__chip--toggle[aria-pressed="false"]:hover { color: var(--text-primary); }
+
+/* Leaves the player. The quietest control on the bar, because it undoes the others. */
+.tp__chip--quiet { color: var(--text-secondary); }
+.tp__chip--quiet:hover { background: var(--surface-hover); color: var(--text-primary); }
+
+/*
+ * The narration, separated from the controls by a rule. Without it the caption looked
+ * like a fourth row of chrome rather than the thing the viewer is meant to read.
+ */
+.tp__now {
+  margin: 0; display: flex; gap: 8px; align-items: baseline;
+  min-height: 15px; font-size: 11px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-subtle);
+}
+.tp__chapter { color: var(--text-secondary); font-weight: 500; }
+.tp__note { color: var(--accent-warm); }
 
 /*
  * The same narration the film carries, repeated at real interface size. A 16:9 frame
  * in a 400px tool window is simply too small to read type off, and this costs nothing
  * because it lives outside the stage and never reaches a render.
  */
-.tp__line { margin: 0; min-height: 15px; font-size: 12px; color: var(--text-primary); }
+.tp__line {
+  margin: 0; min-height: 15px;
+  font-size: 13px; line-height: 1.5;
+  color: var(--text-primary);
+  max-width: 72ch;
+}
 
 /* ======================================================================== *
  *  Stage: a fixed 1200x675 coordinate space, scaled to fit by player.js
