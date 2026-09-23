@@ -1,0 +1,281 @@
+/*
+ * The trust panel, wearing the same light palette as the reel and the deck so the three
+ * panels in the row read as one product. Values are duplicated rather than imported for the
+ * same reason they are there: this page is served from its own root, and a stylesheet shared
+ * across two roots is one more thing that can 404 in a shipped plugin.
+ *
+ * The one thing that must NOT be a token here is the green-to-red scale. That is data, not
+ * chrome: it means "this share of these lines has never run", it has to look the same to
+ * everyone in the room, and it arrives from TrustColors on the Kotlin side already resolved.
+ */
+:root {
+  --surface-base: #F3F5F9;
+  --surface-raised: #FFFFFF;
+  --surface-hover: #E9EEF5;
+  --border-subtle: #DCE3ED;
+  --text-primary: #101828;
+  --text-secondary: #4A5768;
+  --text-muted: #79859A;
+  --accent: #2F6BFF;
+  --dead: #9A9AA4;
+  --font-ui: "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+  --font-code: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-lg: 16px;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+
+body {
+  margin: 0;
+  background: var(--surface-base);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* Exactly the viewport. The picture takes whatever is left after the fixed rows, which only
+   works if the column it sits in is bounded, so height rather than min-height. */
+.trust {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* ------------------------------------------------------------------- the headline */
+
+.hero {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-md) var(--space-lg) var(--space-sm);
+}
+
+.hero__number {
+  font-size: 40px;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
+.hero__text { display: grid; min-width: 0; }
+.hero__said { font-size: 14px; font-weight: 600; color: var(--text-primary); }
+.hero__sub { font-size: 12px; color: var(--text-secondary); }
+
+/* ------------------------------------------------------------------- the controls */
+
+.bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-md);
+  padding: 0 var(--space-lg) var(--space-md);
+}
+
+.run {
+  padding: 6px 14px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--accent);
+  color: #FFFFFF;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.run:hover { background: #1F57E6; }
+.run:disabled { background: var(--text-muted); cursor: default; }
+
+/* A checkbox shows its state. A button whose label names its next action makes you work out
+   the current one, which is why the four buttons this replaced were unreadable. */
+.switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.bar__filter {
+  flex: 1 1 100%;
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.linky {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+/* ------------------------------------------------------------------ nothing yet */
+
+.empty { flex: 1; display: grid; place-items: center; padding: var(--space-lg); }
+.empty__card {
+  max-width: 460px;
+  display: grid;
+  gap: var(--space-sm);
+  text-align: center;
+  color: var(--text-secondary);
+}
+.empty__card strong { color: var(--text-primary); }
+.empty__card p { margin: 0; }
+.empty__cmd {
+  padding: 8px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  font-family: var(--font-code);
+  font-size: 11.5px;
+  overflow-wrap: anywhere;
+}
+
+/* ------------------------------------------------------------------- the picture */
+
+.data {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: 0 var(--space-lg);
+}
+
+/* One labelled bar per folder, which is the same claim the boxes make, read as a list. */
+.strip { display: grid; gap: 3px; flex: none; }
+.strip__row {
+  display: grid;
+  grid-template-columns: minmax(0, 140px) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: 1px 4px;
+  border-radius: 4px;
+  cursor: pointer;
+  background: none;
+  border: 0;
+  font: inherit;
+  text-align: left;
+  color: inherit;
+}
+.strip__row:hover { background: var(--surface-hover); }
+.strip__row[aria-pressed="true"] { background: var(--surface-hover); box-shadow: inset 0 0 0 1px var(--border-subtle); }
+.strip__name {
+  overflow: hidden;
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.strip__track { height: 7px; border-radius: 4px; background: var(--border-subtle); overflow: hidden; }
+/* Block, because a span is inline and an inline box ignores both width and height, so the
+   bars drew their track and no fill at all while the percentages beside them read 72%. */
+.strip__fill { display: block; height: 100%; }
+.strip__pct {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  min-width: 34px;
+  text-align: right;
+}
+
+.picture { position: relative; flex: 1 1 auto; min-height: 120px; }
+.picture__map { display: block; width: 100%; height: 100%; }
+
+.tip {
+  position: absolute;
+  z-index: 2;
+  max-width: 320px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: #101828;
+  color: #FFFFFF;
+  font-size: 11.5px;
+  line-height: 1.35;
+  pointer-events: none;
+}
+.tip b { display: block; font-family: var(--font-code); font-weight: 600; overflow-wrap: anywhere; }
+
+.legend {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.legend__note { white-space: nowrap; }
+.legend__scale { width: 72px; height: 9px; border-radius: 2px; }
+.legend__dead {
+  width: 14px; height: 9px; border-radius: 2px;
+  background: repeating-linear-gradient(45deg, var(--dead) 0 3px, #FFFFFF 3px 4px);
+}
+
+.undrawn { margin: 0; flex: none; font-size: 11px; color: var(--text-muted); }
+
+/* --------------------------------------------------------------------- the list */
+
+.list__head {
+  flex: none;
+  margin: var(--space-sm) 0 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.list {
+  flex: 0 1 34%;
+  min-height: 60px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.list__row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-sm);
+  width: 100%;
+  padding: 3px 4px;
+  border: 0;
+  background: none;
+  font: inherit;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+}
+.list__row:hover { background: var(--surface-hover); }
+.list__name { font-family: var(--font-code); font-size: 11.5px; overflow-wrap: anywhere; }
+.list__tag {
+  padding: 0 5px;
+  border-radius: 3px;
+  background: var(--dead);
+  color: #FFFFFF;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: .05em;
+}
+.list__count { font-size: 11.5px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.list__of { font-size: 11.5px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.list__changed { font-size: 11px; color: var(--text-muted); }
+.list__empty { padding: var(--space-md) 4px; color: var(--text-muted); }
+
+.source {
+  flex: none;
+  margin: 0;
+  padding: var(--space-sm) var(--space-lg);
+  border-top: 1px solid var(--border-subtle);
+  font-size: 11px;
+  color: var(--text-muted);
+}

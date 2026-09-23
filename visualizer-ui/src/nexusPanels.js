@@ -1,5 +1,5 @@
 /*
- * Where the film and the deck are served from, and the two panels that show them.
+ * Where the film, the deck and the trust picture are served from, and the panels that show them.
  *
  * They are iframes rather than React views because they are not React: they are the
  * plugin's own pages, served by the plugin's own HTTP server out of the plugin jar, with
@@ -17,7 +17,24 @@
  * rather than showing an empty frame.
  */
 
-export const PANELS = [
+/**
+ * Every view in the row, in the order they appear.
+ *
+ * One list, written out, and the panels are the entries that have a page. It was two lists
+ * with a spread between them for about ten minutes, which read fine and was wrong: the Reel
+ * and the Deck recreate a project's own navigation for a stakeholder by reading its source,
+ * and a list assembled at runtime from a spread is a list they cannot read. Half a row is a
+ * worse answer than no row, so the row says what it is.
+ */
+export const VIEWS = [
+  {
+    id: 'code',
+    label: 'Code tree',
+  },
+  {
+    id: 'architecture',
+    label: 'Architecture',
+  },
   {
     id: 'reel',
     label: 'Reel',
@@ -32,7 +49,17 @@ export const PANELS = [
     path: 'deck/index.html',
     blurb: 'A presentation, generated from this codebase.',
   },
+  {
+    id: 'trust',
+    label: 'Trust',
+    frame: 'nexus-trust',
+    path: 'trust/index.html',
+    blurb: 'Which of this codebase has never been executed.',
+  },
 ]
+
+/** The views that are the plugin's own pages, and therefore arrive in an iframe. */
+export const PANELS = VIEWS.filter((view) => view.path)
 
 export const PANEL_IDS = PANELS.map((panel) => panel.id)
 

@@ -3,7 +3,15 @@ package com.example.yasinreel.render
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
+import com.example.trust.TrustPayload
+import com.example.trust.TrustRunner
+import com.example.trust.TrustService
+import com.example.trust.TrustWidget
+import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.application.ModalityState
 import com.intellij.openapi.diagnostic.Logger
+import com.intellij.openapi.project.Project
+import com.google.gson.Gson
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
 import java.io.IOException
@@ -39,6 +47,23 @@ class ReelServer : Disposable {
      */
     @Volatile
     private var ttsRoot: Path? = null
+
+    /**
+     * The project the Trust panel answers about.
+     *
+     * Trust is a panel in the Map page rather than a tab of its own, so its data has to reach a
+     * web page, and the only door into this application level server is a route. A route has no
+     * project, hence this: the tool window hands one over when it opens, the same way it hands
+     * over the narration directory above. Held weakly because this server outlives any project,
+     * and a strong reference here would keep a closed one alive for the life of the IDE.
+     */
+    @Volatile
+    private var trustProject: java.lang.ref.WeakReference<Project>? = null
+
+    /** Called by the tool window when it opens, so `/trust.json` has something to answer about. */
+    fun serveTrustFor(project: Project) {
+        trustProject = java.lang.ref.WeakReference(project)
+    }
 
     /** Called by the tool window alongside [baseUrl], so `tts/<hash>.mp3` resolves. */
     fun serveTtsFrom(path: String?) {
@@ -142,9 +167,104 @@ class ReelServer : Disposable {
         http.createContext("/" + DECK_PREFIX) { exchange -> serve(exchange, DECK_ROOT, DECK_PREFIX + "/") }
         // One copy of the code both tabs share, reachable from both by absolute path.
         http.createContext("/" + SHARED_PREFIX) { exchange -> serve(exchange, SHARED_ROOT, SHARED_PREFIX + "/") }
+        // Registered before the static prefix would swallow them: the longest match wins, so
+        // `/trust/model.json` has to be its own context or `/trust` would look for a file.
+        http.createContext("/" + TRUST_PREFIX + "/model.json") { exchange -> trustModel(exchange) }
+        http.createContext("/" + TRUST_PREFIX + "/run") { exchange -> trustRun(exchange) }
+        http.createContext("/" + TRUST_PREFIX + "/paint") { exchange -> trustPaint(exchange) }
+        http.createContext("/" + TRUST_PREFIX) { exchange -> serve(exchange, TRUST_ROOT, TRUST_PREFIX + "/") }
         // How a page that was served by Vite finds the plugin. Same origin when we serve
         // the Map ourselves, and proxied by vite.config.js when the dev server is running.
         http.createContext("/nexus.json") { exchange -> describe(exchange) }
+    }
+
+    /**
+     * The Trust verdict for the open project, laid out for the box the page has.
+     *
+     * Answered on the server's own thread, which is what makes this safe: building it searches
+     * the project for files nothing references, and that is work the event thread must never be
+     * asked to do.
+     */
+    private fun trustModel(exchange: HttpExchange) {
+        val project = trustProject?.get()
+        val body = when {
+            project == null || project.isDisposed -> mapOf("ready" to false, "reason" to "no project")
+            else -> runCatching {
+                val ask = query(exchange.requestURI.query)
+                TrustPayload.of(
+                    project,
+                    ask["w"]?.toDoubleOrNull() ?: 0.0,
+                    ask["h"]?.toDoubleOrNull() ?: 0.0,
+                    deadOnly = ask["dead"] == "1",
+                )
+            }.onFailure { logger.warn("Nexus could not build the Trust model", it) }
+                .getOrElse { mapOf("ready" to false, "reason" to "could not read the coverage report") }
+        }
+        json(exchange, GSON.toJson(body))
+    }
+
+    /**
+     * Starts the project's coverage command, the way the Trust tab's one button used to.
+     *
+     * The reply says only whether it started. What it produced arrives the way every other
+     * change to the report does: the watcher notices the file and the page refetches. That
+     * keeps one path for "the numbers moved" whether the run came from this button, a
+     * terminal, or a file copied in from CI.
+     */
+    private fun trustRun(exchange: HttpExchange) {
+        val project = trustProject?.get()
+        val command = project?.takeIf { !it.isDisposed }?.let { TrustRunner.commandFor(it) }
+        if (project == null || command == null) {
+            json(exchange, """{"started":false}""")
+            return
+        }
+        // showRunContent touches the tool window, so the whole call belongs on the event thread.
+        ApplicationManager.getApplication().invokeLater(
+            { if (!project.isDisposed) TrustRunner.run(project, command) {} },
+            ModalityState.any(),
+            project.disposed,
+        )
+        json(exchange, """{"started":true}""")
+    }
+
+    /**
+     * Turns the editor highlighting on or off.
+     *
+     * Goes through [TrustWidget.toggle] rather than through the service, because that is the one
+     * switch: it flips the state, repaints the open editors and updates the status bar together.
+     * Flipping the service here would leave the other two saying the opposite.
+     */
+    private fun trustPaint(exchange: HttpExchange) {
+        val project = trustProject?.get()?.takeIf { !it.isDisposed }
+        if (project == null) {
+            json(exchange, """{"paint":false}""")
+            return
+        }
+        ApplicationManager.getApplication().invokeAndWait(
+            { if (!project.isDisposed) TrustWidget.toggle(project) },
+            ModalityState.any(),
+        )
+        json(exchange, """{"paint":${TrustService.getInstance(project).enabled}}""")
+    }
+
+    private fun query(raw: String?): Map<String, String> =
+        raw.orEmpty().split('&').mapNotNull {
+            val name = it.substringBefore('=', "")
+            if (name.isEmpty()) null else name to it.substringAfter('=', "")
+        }.toMap()
+
+    private fun json(exchange: HttpExchange, body: String) {
+        try {
+            val bytes = body.toByteArray(Charsets.UTF_8)
+            exchange.responseHeaders.add("Content-Type", "application/json; charset=utf-8")
+            exchange.responseHeaders.add("Cache-Control", "no-store")
+            exchange.sendResponseHeaders(200, bytes.size.toLong())
+            exchange.responseBody.use { it.write(bytes) }
+        } catch (e: IOException) {
+            logger.warn("Nexus could not answer ${exchange.requestURI}", e)
+        } finally {
+            exchange.close()
+        }
     }
 
     /** Announces where the plugin is answering, so an embedded page never guesses a port. */
@@ -255,6 +375,12 @@ class ReelServer : Disposable {
          * way from the Map page rather than one of them being "whatever is left over".
          */
         private const val REEL_PREFIX = "reel"
+
+        /** The trust panel, served like the deck: its own prefix on the same port. */
+        private const val TRUST_ROOT = "yasin-trust"
+        private const val TRUST_PREFIX = "trust"
+
+        private val GSON = Gson()
 
         /**
          * Asked for first, so `vite.config.js` has something to proxy to. Not reserved by

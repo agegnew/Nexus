@@ -30,6 +30,19 @@
 
 ### Changed
 
+- One row of five views, and Trust is in it. Trust was a second tab on the side of the
+  window, which put one view on a different shelf from the other four for a reason that was
+  true of the implementation, it was Swing and they are web pages, and meaningless to
+  anyone using it. It is a panel now, after Deck, drawn from a layout the plugin computes
+  with the same Squarify and the same colour scale the Swing picture used, so the two
+  cannot disagree about where a file is or what colour it should be. Selecting a folder,
+  dead-only mode, the editor paint switch and the one button that runs the project with
+  coverage all work from there.
+- Activity is no longer in the row. Its code, its endpoint and its summariser are untouched;
+  it simply is not one of the views offered.
+- The row is one declared list rather than two hardcoded buttons and a mapped array. The
+  Reel and the Deck recreate a project's own navigation by reading its source, and this
+  project's row could only be half read while half of it was markup.
 - The sixteen icons in both the film and the deck are drawn for this plugin rather than
   being Microsoft's Fluent Emoji. One weight, one colour, one grid. The emoji were good
   artwork and the wrong register for a room deciding whether to fund the work. They are

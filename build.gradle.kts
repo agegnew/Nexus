@@ -4,6 +4,18 @@ plugins {
     id("org.jetbrains.kotlin.jvm")
     id("org.jetbrains.changelog")
     id("org.jetbrains.intellij.platform")
+    // So this repository can be the demo for its own Trust panel. The panel reads a JaCoCo
+    // report and nothing here was writing one, so pointing the plugin at Nexus showed nothing.
+    jacoco
+}
+
+// XML, because that is the format CoverageReportSource reads. The HTML report is on by default
+// and is of no use to anything here, so it is turned off rather than written and ignored.
+tasks.named<JacocoReport>("jacocoTestReport") {
+    reports {
+        xml.required.set(true)
+        html.required.set(false)
+    }
 }
 
 // Read more: https://plugins.jetbrains.com/docs/intellij/tools-intellij-platform-gradle-plugin.html

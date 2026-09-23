@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Nexus Trust</title>
+  <link rel="stylesheet" href="trust.css"/>
+</head>
+<body>
+<!--
+  Which of this project has never been executed.
+
+  This was a Swing tab of its own, on the shelf beside the one page that holds every other
+  view. That split was true of the implementation and meaningless to the person using it, so
+  Trust is a panel in the row now, and a panel in the row is a page.
+
+  Nothing here computes anything. The verdict, the counts and every rectangle arrive already
+  settled from TrustPayload on the Kotlin side, drawn by the same Squarify the Swing picture
+  used, so the two cannot disagree about where a file is or what colour it should be.
+-->
+<main class="trust" id="trust">
+
+  <header class="hero" id="hero">
+    <strong class="hero__number" id="hero-number">-</strong>
+    <div class="hero__text">
+      <span class="hero__said" id="hero-said">Reading the coverage report</span>
+      <span class="hero__sub" id="hero-sub"></span>
+    </div>
+  </header>
+
+  <div class="bar">
+    <button class="run" id="run" type="button">Run with coverage</button>
+    <label class="switch"><input type="checkbox" id="paint"> Paint in editor</label>
+    <label class="switch"><input type="checkbox" id="dead-only"> Only dead code</label>
+    <p class="bar__filter" id="filter" hidden>
+      <span id="filter-text"></span>
+      <button class="linky" id="show-all" type="button">show all folders</button>
+    </p>
+  </div>
+
+  <!-- Nothing measured yet. Says what the tab is and what to press, rather than drawing an
+       empty rectangle and leaving the reader to guess whether it is broken. -->
+  <section class="empty" id="empty" hidden>
+    <div class="empty__card">
+      <strong id="empty-head">Nothing measured yet.</strong>
+      <p id="empty-body"></p>
+      <code class="empty__cmd" id="empty-cmd" hidden></code>
+    </div>
+  </section>
+
+  <section class="data" id="data" hidden>
+    <div class="strip" id="strip" aria-label="Folders by never-run lines"></div>
+
+    <div class="picture">
+      <canvas class="picture__map" id="map"></canvas>
+      <div class="tip" id="tip" hidden></div>
+    </div>
+
+    <div class="legend">
+      <span class="legend__note">one box per file, area = lines of code</span>
+      <span class="legend__scale" id="legend-scale" aria-hidden="true"></span>
+      <span class="legend__note">never ran</span>
+      <span class="legend__dead" aria-hidden="true"></span>
+      <span class="legend__note">hatched = dead: nothing imports it, nothing ran it</span>
+    </div>
+
+    <p class="undrawn" id="undrawn" hidden></p>
+
+    <h2 class="list__head" id="list-head"></h2>
+    <ul class="list" id="list"></ul>
+  </section>
+
+  <p class="source" id="source"></p>
+
+</main>
+
+<script src="runtime/trust.js"></script>
+</body>
+</html>

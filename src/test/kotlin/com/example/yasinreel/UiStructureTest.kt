@@ -78,14 +78,46 @@ class UiStructureTest {
     }
 
     @Test
-    fun `a project whose words live only in its markup is still read`() {
-        // This repo's own visualizer declares no navigation array at all: the three
-        // labels are written into the JSX. An array-only extractor reports that a
-        // project with an interface has none, which is a false statement about it.
+    fun `this repo's own row is read whole, in order`() {
+        // This used to assert the three labels that were written straight into the JSX, and it
+        // was the guard for a project whose navigation is markup rather than data. The row is
+        // one declared list now, and this caught the change the honest way round: it failed
+        // with [Reel, Deck, Trust], because the list had been assembled with a spread and only
+        // the spread part could be read. Half a row is a worse answer than no row.
         val root = File("visualizer-ui")
         if (!root.isDirectory) return
         val ui = UiStructureHarvester.from(sourcesOf(root), anyDesign)
-        assertEquals(listOf("Code tree", "Architecture", "Activity"), labels(ui))
+        assertEquals(listOf("Code tree", "Architecture", "Reel", "Deck", "Trust"), labels(ui))
+    }
+
+    @Test
+    fun `a project whose words live only in its markup is still read`() {
+        // The capability the test above used to guard, now that this repository is no longer a
+        // fixture for it. An array-only extractor tells a project with an interface that it has
+        // none, which is a false statement about it, so the markup path has to stay covered.
+        //
+        // Plain text inside each link, which is the shape CLICKABLE actually matches. A link
+        // wrapping an icon element and then its label is not read, and that is a real gap in
+        // the harvester rather than a property of this fixture.
+        val markup = listOf(
+            UiStructureHarvester.Source(
+                "web/src/Shell.tsx",
+                """
+                export function Shell() {
+                  return (
+                    <nav className="sidebar">
+                      <a href="/inbox">Inbox</a>
+                      <a href="/drafts">Drafts</a>
+                      <a href="/sent">Sent</a>
+                      <a href="/archive">Archive</a>
+                    </nav>
+                  )
+                }
+                """.trimIndent(),
+            ),
+        )
+        val ui = UiStructureHarvester.from(markup, anyDesign)
+        assertEquals(listOf("Inbox", "Drafts", "Sent", "Archive"), labels(ui))
     }
 
     @Test

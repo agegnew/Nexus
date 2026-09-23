@@ -103,10 +103,12 @@ object TrustRunner {
     /**
      * A best guess from what is lying at the project root.
      *
-     * Two ecosystems, because those are the two whose report formats this plugin reads.
-     * A Gradle project is deliberately not guessed at: JaCoCo writes its own XML, which is
-     * not Cobertura, and a button that runs for a minute and then changes nothing is worse
-     * than a button that says it does not know.
+     * Three ecosystems, because those are the three whose report formats this plugin reads.
+     *
+     * Gradle used to be left out on purpose, on the grounds that JaCoCo writes its own XML and
+     * not Cobertura, so a button that ran for a minute and then changed nothing was worse than
+     * a button that admitted it did not know. CoverageReportSource reads JaCoCo now, so that
+     * reason has expired and the button can offer it.
      */
     internal fun detect(root: File): CoverageCommand? {
         val python = PYTHON_MARKERS.any { File(root, it).isFile }
@@ -115,6 +117,18 @@ object TrustRunner {
             return CoverageCommand(
                 "$interpreter -m coverage run -m pytest -q && $interpreter -m coverage xml -o coverage.xml",
                 "detected: Python project, pytest with coverage.py",
+            )
+        }
+
+        val wrapper = GRADLE_WRAPPERS.map { File(root, it) }.firstOrNull { it.isFile }
+        if (wrapper != null) {
+            // jacocoTestReport needs the jacoco plugin applied. If the project has not applied
+            // it the task is unknown, Gradle fails loudly in the console, and that is the right
+            // outcome: the reason is on screen rather than being a tab that silently stays empty.
+            val launcher = if (SystemInfo.isWindows) "gradlew.bat" else "./gradlew"
+            return CoverageCommand(
+                "$launcher test jacocoTestReport",
+                "detected: Gradle project, JaCoCo",
             )
         }
 
@@ -138,4 +152,5 @@ object TrustRunner {
 
     private val PYTHON_MARKERS = listOf("pyproject.toml", "requirements.txt", "setup.py", "pytest.ini", "setup.cfg")
     private val VENV_PYTHONS = listOf(".venv/bin/python", "venv/bin/python")
+    private val GRADLE_WRAPPERS = listOf("gradlew", "gradlew.bat")
 }

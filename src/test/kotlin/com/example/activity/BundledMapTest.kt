@@ -10,7 +10,7 @@ import java.io.File
  * The Map tab loads http://localhost:5173, which ReelServer answers from the bundled
  * `nexus-map` resources whenever no Vite dev server holds the port. Those resources are
  * a build output committed to the repository, so they go stale silently: the plugin still
- * starts, the Map still renders, and the Activity tab is simply missing for anyone who is
+ * starts, the Map still renders, and the newest view is simply missing for anyone who is
  * not running `npm run dev`. Nothing else would catch that.
  */
 class BundledMapTest {
@@ -42,11 +42,13 @@ class BundledMapTest {
     }
 
     @Test
-    fun `the bundled map carries the activity tab`() {
+    fun `the bundled map carries every view in the row`() {
         val scripts = File(mapRoot, "assets").listFiles { file -> file.extension == "js" }.orEmpty()
         assertTrue("No scripts bundled in $mapRoot/assets", scripts.isNotEmpty())
 
-        val markers = listOf("Summarise", "Include uncommitted", "Only my commits")
+        // The labels of the row itself, which is the thing that changes whenever a view is
+        // added or dropped, and therefore the thing whose absence means the bundle is old.
+        val markers = listOf("Code tree", "Architecture", "Reel", "Deck", "Trust")
         val found = markers.filter { marker -> scripts.any { it.readText().contains(marker) } }
 
         assertTrue(
