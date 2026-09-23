@@ -1,1 +1,4 @@
 __pycache__/
+
+# The virtual environment start.sh creates. Machine specific, never committed.
+.venv/

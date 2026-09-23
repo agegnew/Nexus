@@ -176,8 +176,12 @@ object TrustRunner {
             // it the task is unknown, Gradle fails loudly in the console, and that is the right
             // outcome: the reason is on screen rather than being a tab that silently stays empty.
             val launcher = if (SystemInfo.isWindows) "gradlew.bat" else "./gradlew"
+            // --continue, because Gradle stops at the first failing task and the report is the
+            // task after the tests. A project with one red test would otherwise run for minutes
+            // and write nothing, which is the same "it did nothing" from a different direction.
+            // A failing test is also exactly when you want to see what has never run.
             return CoverageCommand(
-                "$launcher test jacocoTestReport",
+                "$launcher test jacocoTestReport --continue",
                 "detected: Gradle project$inside, JaCoCo",
                 relative,
             )
