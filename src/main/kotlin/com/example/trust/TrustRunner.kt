@@ -112,8 +112,11 @@ object TrustRunner {
         val python = PYTHON_MARKERS.any { File(root, it).isFile }
         if (python) {
             val interpreter = VENV_PYTHONS.map { File(root, it) }.firstOrNull { it.canExecute() }?.path ?: "python3"
+            // A semicolon, not &&. The coverage data is complete whether or not pytest exits
+            // green, and on a real project one failing test is an ordinary day; chaining with
+            // && would turn that day into "the button did nothing".
             return CoverageCommand(
-                "$interpreter -m coverage run -m pytest -q && $interpreter -m coverage xml -o coverage.xml",
+                "$interpreter -m coverage run -m pytest -q; $interpreter -m coverage xml -o coverage.xml",
                 "detected: Python project, pytest with coverage.py",
             )
         }
@@ -122,8 +125,11 @@ object TrustRunner {
         if (pkg.isFile) {
             val text = runCatching { pkg.readText() }.getOrDefault("")
             if (text.contains("\"vitest\"")) {
+                // reportOnFailure: without it vitest prints "coverage enabled" and then writes
+                // no report at all when any test fails. Found the hard way on a project with
+                // 21 red tests and a perfectly good coverage setup.
                 return CoverageCommand(
-                    "npx vitest run --coverage.enabled --coverage.reporter=lcov",
+                    "npx vitest run --coverage.enabled --coverage.reporter=lcov --coverage.reportOnFailure",
                     "detected: vitest",
                 )
             }
