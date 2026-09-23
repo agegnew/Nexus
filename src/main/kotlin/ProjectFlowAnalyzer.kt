@@ -74,7 +74,12 @@ object ProjectFlowAnalyzer {
         ".next", ".nuxt", ".svelte-kit", ".output", ".venv", "venv", "__pycache__", ".gradle",
         ".idea", ".git", ".kotlin", ".cache", "site-packages", ".turbo", ".claude",
         // Output this plugin and its neighbours write into the project they are reading.
-        "yasin-reel", "yasin-deck", "yasin-shared", "brag-output", ".work"
+        "yasin-reel", "yasin-deck", "yasin-shared", "brag-output", ".work",
+        // This repository carries a fixture project so the analyzer has real calls and
+        // real endpoints to match. It is not part of Nexus, and counting it makes Nexus
+        // look like a FastAPI service. Named exactly, not as "demo", because a folder
+        // called demo in somebody else's project is usually part of their product.
+        "nexus-demo-app"
     )
     private val generatedNamePattern = Regex("""(?i)(\.min\.|\.bundle\.|-[0-9a-f]{8}\.(js|ts)$|\.d\.ts$)""")
 

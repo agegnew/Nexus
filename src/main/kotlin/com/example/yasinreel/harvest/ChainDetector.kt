@@ -40,7 +40,12 @@ object ChainDetector {
 
     private val ignoredPathSegments = setOf(
         "node_modules", "build", "dist", "out", "target", "vendor", "coverage",
-        ".next", ".nuxt", ".venv", "venv", "__pycache__", ".gradle", ".idea"
+        ".next", ".nuxt", ".venv", "venv", "__pycache__", ".gradle", ".idea",
+        // This repository carries a fixture project so the analyzer has real calls and
+        // real endpoints to match. It is not part of Nexus, and counting it makes Nexus
+        // look like a FastAPI service. Named exactly, not as "demo", because a folder
+        // called demo in somebody else's project is usually part of their product.
+        "nexus-demo-app"
     )
 
     // The lookbehind matters: without it `toolWindow.contentManager` reads as a window global.

@@ -368,7 +368,7 @@ private class TrustPanel(private val project: Project) : JPanel(BorderLayout()),
         paintBox.isSelected = TrustService.getInstance(project).enabled
 
         if (known.isEmpty()) {
-            heroNumber.text = "—"
+            heroNumber.text = "-"
             heroNumber.foreground = UIUtil.getInactiveTextColor()
             heroSaid.text = "No execution data for this project"
             heroSub.text = "Nothing here has been measured yet"

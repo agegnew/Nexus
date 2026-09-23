@@ -175,6 +175,66 @@ class CoverageReportSourceTest {
         assertEquals(setOf("app/main.py"), source.parse(report, root).keys)
     }
 
+    /**
+     * The shape `pytest --cov=app --cov-report=xml` writes when it is run from a backend
+     * directory: the report names its own source root absolutely and then gives every filename
+     * relative to it. Without reading <sources> not one of those filenames is a file on this
+     * disk, so the tab drew an empty picture and said nothing was wrong.
+     */
+    @Test
+    fun `cobertura filenames resolve against the source root the report declares`() {
+        val root = temp.newFolder("project")
+        val backend = File(root, "backend")
+        write(root, "backend/app/access.py", lines = 6)
+
+        val report = file(
+            root, "coverage.xml",
+            """
+            <coverage>
+              <sources><source>${backend.absolutePath}</source></sources>
+              <packages><package name="app"><classes>
+                <class filename="app/access.py">
+                  <lines><line number="1" hits="2"/><line number="4" hits="0"/></lines>
+                </class>
+              </classes></package></packages>
+            </coverage>
+            """.trimIndent(),
+        )
+
+        val parsed = source.parse(report, root)
+
+        assertEquals(setOf("backend/app/access.py"), parsed.keys)
+        assertEquals(listOf(LineRange(4, 4)), parsed.getValue("backend/app/access.py").unproven)
+    }
+
+    /** A Gradle JVM project, which is what Nexus itself is, writes JaCoCo rather than Cobertura. */
+    @Test
+    fun `jacoco lines with no covered instructions are unproven`() {
+        val root = temp.newFolder("project")
+        write(root, "src/main/kotlin/com/example/trust/Thing.kt", lines = 20)
+
+        val report = file(
+            root, "build/reports/jacoco/test/jacocoTestReport.xml",
+            """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <report name="JACOCO">
+              <package name="com/example/trust">
+                <sourcefile name="Thing.kt">
+                  <line nr="3" mi="0" ci="4" mb="0" cb="0"/>
+                  <line nr="9" mi="5" ci="0" mb="0" cb="0"/>
+                  <line nr="10" mi="2" ci="0" mb="0" cb="0"/>
+                </sourcefile>
+              </package>
+            </report>
+            """.trimIndent(),
+        )
+
+        val trust = source.parse(report, root).getValue("src/main/kotlin/com/example/trust/Thing.kt")
+
+        assertEquals(listOf(LineRange(9, 10)), trust.unproven)
+        assertEquals(3, trust.totalLines)
+    }
+
     private fun write(root: File, path: String, lines: Int): File =
         file(root, path, (1..lines).joinToString("\n") { "# line $it" })
 

@@ -41,7 +41,12 @@ object UiSources {
         ".kotlin", ".intellijplatform", ".cache", "site-packages", "pods", "deriveddata",
         // Everything this plugin and its neighbours write into a project they are reading.
         // Without these, the second run harvests the first run's output as the product.
-        "yasin-reel", "yasin-deck", "yasin-shared", ".work", "brag-output", ".claude", ".turbo"
+        "yasin-reel", "yasin-deck", "yasin-shared", ".work", "brag-output", ".claude", ".turbo",
+        // This repository carries a fixture project so the analyzer has real calls and
+        // real endpoints to match. It is not part of Nexus, and counting it makes Nexus
+        // look like a FastAPI service. Named exactly, not as "demo", because a folder
+        // called demo in somebody else's project is usually part of their product.
+        "nexus-demo-app"
     )
 
     /** Everything the two interface harvesters read, collected in one pass. */

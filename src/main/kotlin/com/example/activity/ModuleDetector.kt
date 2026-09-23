@@ -27,7 +27,11 @@ object ModuleDetector {
     private val ignored = setOf(
         "node_modules", "dist", "build", "out", "target", "coverage", ".next", ".nuxt", ".output",
         ".svelte-kit", ".angular", ".turbo", ".cache", ".gradle", ".idea", ".git", "venv", ".venv",
-        "env", "__pycache__", "vendor", "site-packages", "bin", "obj", ".intellijPlatform"
+        "env", "__pycache__", "vendor", "site-packages", "bin", "obj", ".intellijPlatform",
+        // The fixture project this repository carries so the analyzer has calls and
+        // endpoints to match. It is a separate product with its own manifests, and
+        // scanning it makes Nexus look like a React and FastAPI app with a plugin bolted on.
+        "nexus-demo-app"
     )
 
     private val jvmManifests = setOf("build.gradle", "build.gradle.kts", "pom.xml")

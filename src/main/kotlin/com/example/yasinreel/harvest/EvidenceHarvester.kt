@@ -78,7 +78,12 @@ object EvidenceHarvester {
     private val ignoredDirs = setOf(
         "node_modules", "build", "dist", "out", "target", "vendor", "coverage", "bin", "obj",
         ".next", ".nuxt", ".venv", "venv", "env", "__pycache__", ".gradle", ".idea", ".git",
-        ".kotlin", ".intellijplatform", ".cache", "site-packages", "pods", "deriveddata"
+        ".kotlin", ".intellijplatform", ".cache", "site-packages", "pods", "deriveddata",
+        // This repository carries a fixture project so the analyzer has real calls and
+        // real endpoints to match. It is not part of Nexus, and counting it makes Nexus
+        // look like a FastAPI service. Named exactly, not as "demo", because a folder
+        // called demo in somebody else's project is usually part of their product.
+        "nexus-demo-app"
     )
 
     /**
