@@ -7,19 +7,19 @@ one-screen report. Each failure links to the line of code behind it.
 
 ```
 cd swarm && npm install && npx playwright install chromium
-cd demo/nexus-demo-app && ./start.ps1          # Harbor Market on http://localhost:5174
+cd demo/nexus-demo-app && ./start.sh            # ./start.ps1 on Windows. Harbor Market on http://localhost:5174
 ./gradlew runIde                                 # then open demo/nexus-demo-app in the sandbox IDE
 ```
 
 - Put an OpenAI key in **Settings | Tools | Nexus** (or `OPENAI_API_KEY`). Without one the agents
   follow scripted journeys. That works and finds the same bugs, but the tiles say "Scripted".
-- Open **Nexus → Map tab → Swarm**, press **Run 5 agents** once to warm it up. This also records
+- Open **Nexus → Swarm**, the last view in the row, press **Run 5 testers** once to warm it up. This also records
   the run that **Replay last run** plays if Wi-Fi or the API fails on stage.
 
 ## The 60-second script
 
-1. "Nexus already knows this app's map: 6 calls, 2 of them go nowhere." (Map / Architecture tab)
-2. "Instead of writing tests, I send five users at it." Press **Run 5 agents**.
+1. "Nexus already knows this app's map: 6 calls, 2 of them go nowhere." (the **Architecture** view)
+2. "Instead of writing tests, I send five users at it." Press **Run 5 testers**.
 3. The five tiles go live: Shopper, Explorer, Regular, Manager, Chaos Monkey, each with its own
    cursor, thought bubble and live API calls. Click a tile to enlarge it.
 4. Tiles stamp green or red. Manager's page crashes. Chaos Monkey gets "Order #undefined".
