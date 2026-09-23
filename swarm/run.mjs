@@ -4,7 +4,11 @@
 //   node run.mjs serve [--port 7070] [--out dir]
 //       Control server for the Nexus tab. Prints NEXUS_SWARM_READY {"port":N} once listening.
 //   node run.mjs once --target http://localhost:5174 [--graph graph.json] [--headed] [--out dir]
+//                     [--project dir] [--user name --password secret] [--focus "checkout"]
 //       One run from the terminal. Prints the report and exits 0 when every journey passed.
+//
+// --project (or NEXUS_SWARM_PROJECT) is the source folder: its README, CLAUDE.md and docs brief
+// the planner. The password can also come from NEXUS_SWARM_PASSWORD, to keep it out of shell history.
 //
 // The model key comes from OPENAI_API_KEY (or OPENAI_KEY); without one the agents follow their
 // scripted journeys, so the run still works offline. NEXUS_SWARM_MODEL picks the model.
@@ -39,9 +43,10 @@ const brain = createBrain({
 const outDir = resolve(options.out || join(tmpdir(), 'nexus-swarm'))
 const pace = options.pace ? Number(options.pace) : undefined
 const maxSteps = options['max-steps'] ? Number(options['max-steps']) : undefined
+const projectPath = typeof options.project === 'string' ? resolve(options.project) : process.env.NEXUS_SWARM_PROJECT || null
 
 if (options.command === 'serve') {
-  const server = createSwarmServer({ brain, outDir, pace, maxSteps })
+  const server = createSwarmServer({ brain, outDir, pace, maxSteps, projectPath })
   const port = Number(options.port ?? 7070)
   server.on('error', (error) => {
     console.error(`NEXUS_SWARM_ERROR ${JSON.stringify({ message: error.message })}`)
@@ -67,6 +72,11 @@ if (options.command === 'serve') {
     outDir,
     pace,
     maxSteps,
+    projectPath,
+    credentials: typeof options.user === 'string'
+      ? { username: options.user, password: typeof options.password === 'string' ? options.password : process.env.NEXUS_SWARM_PASSWORD || '' }
+      : null,
+    focus: typeof options.focus === 'string' ? options.focus : '',
     emit: (event) => {
       if (options.verbose && event.type === 'agent') console.log(`  [${event.id}] ${event.status} · ${event.action || ''} ${event.thought || ''}`)
       if (event.type === 'run' && event.message) console.log(`· ${event.message}`)

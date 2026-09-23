@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useReducer, useRef, useState } from 'react'
 import { connectSwarm, hasHost, openSource, params, readPreference, writePreference } from '../bridge'
 import { fileName } from '../model'
 import './swarm.css'
@@ -7,6 +7,10 @@ import './swarm.css'
 // live into five tiles; a one-screen report follows. The agents live in a local Node runner
 // (swarm/run.mjs). Inside the IDE the plugin starts it and tells us its port; in a plain browser
 // it is expected on 7070 (`npm run serve` in swarm/), or wherever ?swarm= points.
+//
+// Before planning, the runner reads the project's own docs (CLAUDE.md, README.md) and looks around
+// the app. An optional test account lets the testers sign in; its password stays in this tab's
+// memory and in the browsers the agents drive, never in the model's prompt or the replay file.
 
 const DEFAULT_RUNNER = 'http://127.0.0.1:7070'
 const DEFAULT_TARGET = 'http://localhost:5174'
@@ -23,6 +27,7 @@ const STATUS_LABEL = {
 const PHASE_LABEL = {
   idle: 'Ready',
   starting: 'Starting browsers',
+  scouting: 'Reading the project',
   planning: 'Planning missions',
   running: 'Agents testing',
   reporting: 'Writing report',
@@ -37,6 +42,8 @@ const initialState = {
   brain: '',
   canThink: false,
   hasReplay: false,
+  project: null,
+  app: '',
   phase: 'idle',
   message: '',
   replay: false,
@@ -47,8 +54,10 @@ const initialState = {
   finishedAt: null,
 }
 
+const LIVE_PHASES = ['starting', 'scouting', 'planning', 'running', 'reporting']
+
 function blankAgent() {
-  return { status: 'queued', thought: '', action: '', step: 0, lastCall: null, calls: 0, failedCalls: 0 }
+  return { status: 'queued', thought: '', action: '', step: 0, lastCall: null, calls: 0, failedCalls: 0, review: null }
 }
 
 function reduce(state, event) {
@@ -60,9 +69,9 @@ function reduce(state, event) {
     case 'snapshot': {
       const snapshot = event.state ?? {}
       const agents = Object.fromEntries(Object.entries(snapshot.agents ?? {}).map(([id, agent]) => [
-        id, { ...blankAgent(), status: agent.status, thought: agent.thought, action: agent.action, step: agent.step, calls: agent.calls ?? 0 },
+        id, { ...blankAgent(), status: agent.status, thought: agent.thought, action: agent.action, step: agent.step, calls: agent.calls ?? 0, review: agent.review ?? null },
       ]))
-      const live = ['starting', 'planning', 'running', 'reporting'].includes(snapshot.phase)
+      const live = LIVE_PHASES.includes(snapshot.phase)
       return {
         ...state,
         connection: 'online',
@@ -70,6 +79,8 @@ function reduce(state, event) {
         brain: event.brain,
         canThink: event.canThink,
         hasReplay: Boolean(event.hasReplay),
+        project: event.project ?? state.project,
+        app: snapshot.app ?? '',
         phase: snapshot.phase ?? 'idle',
         message: snapshot.message ?? '',
         replay: Boolean(snapshot.replay),
@@ -80,9 +91,9 @@ function reduce(state, event) {
       }
     }
     case 'run': {
-      const next = { ...state, phase: event.phase, message: event.message ?? state.message, replay: Boolean(event.replay) }
+      const next = { ...state, phase: event.phase, message: event.message ?? state.message, replay: Boolean(event.replay), project: event.project ?? state.project }
       if (event.phase === 'starting') {
-        return { ...next, missions: [], agents: {}, report: null, startedAt: Date.now(), finishedAt: null }
+        return { ...next, missions: [], agents: {}, app: '', report: null, startedAt: Date.now(), finishedAt: null }
       }
       if (['done', 'stopped', 'error'].includes(event.phase)) {
         return { ...next, finishedAt: Date.now(), hasReplay: state.hasReplay || event.phase === 'done' }
@@ -90,7 +101,7 @@ function reduce(state, event) {
       return next
     }
     case 'missions':
-      return { ...state, missions: event.missions, agents: Object.fromEntries(event.missions.map((mission) => [mission.id, blankAgent()])) }
+      return { ...state, missions: event.missions, app: event.app ?? '', agents: Object.fromEntries(event.missions.map((mission) => [mission.id, blankAgent()])) }
     case 'agent': {
       const agent = state.agents[event.id] ?? blankAgent()
       return {
@@ -103,6 +114,7 @@ function reduce(state, event) {
             thought: event.thought || agent.thought,
             action: event.action ?? agent.action,
             step: event.step ?? agent.step,
+            review: event.review ?? agent.review,
           },
         },
       }
@@ -147,6 +159,51 @@ function CallChip({ call }) {
   )
 }
 
+function Stars({ rating, label = true }) {
+  const full = Math.max(0, Math.min(5, Math.round(rating ?? 0)))
+  return (
+    <span className="swarm-stars" role="img" aria-label={`${rating} out of 5 stars`} title={`${rating} / 5`}>
+      <span aria-hidden="true">{'★'.repeat(full)}<i>{'★'.repeat(5 - full)}</i></span>
+      {label && <b>{Number(rating).toFixed(Number.isInteger(rating) ? 0 : 1)}</b>}
+    </span>
+  )
+}
+
+function Review({ review }) {
+  return (
+    <div className="swarm-review">
+      <p className="swarm-review__quote">
+        {review.title && <strong>{review.title}. </strong>}
+        “{review.review}”
+      </p>
+      <div className="swarm-review__lists">
+        {review.worked.length > 0 && (
+          <div>
+            <h4>Worked</h4>
+            <ul>{review.worked.map((item) => <li key={item}>{item}</li>)}</ul>
+          </div>
+        )}
+        {review.problems.length > 0 && (
+          <div>
+            <h4>Problems</h4>
+            <ul>
+              {review.problems.map((problem) => (
+                <li key={problem.text}><span className={`swarm-severity swarm-severity--${problem.severity}`}>{problem.severity}</span> {problem.text}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {review.suggestions.length > 0 && (
+          <div>
+            <h4>Suggestions</h4>
+            <ul>{review.suggestions.map((item) => <li key={item}>{item}</li>)}</ul>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function Tile({ index, mission, agent, focused, onFocus, registerImage }) {
   const status = agent?.status ?? 'queued'
   const color = mission?.color ?? 'var(--border-subtle)'
@@ -182,7 +239,9 @@ function Tile({ index, mission, agent, focused, onFocus, registerImage }) {
           {agent?.action && <code className="swarm-tile__action">{agent.step > 0 ? `${agent.step}. ` : ''}{agent.action}</code>}
           <CallChip call={agent?.lastCall} />
         </div>
-        {agent?.thought && <p className="swarm-tile__thought">“{agent.thought}”</p>}
+        {agent?.review
+          ? <p className="swarm-tile__thought swarm-tile__thought--review"><Stars rating={agent.review.rating} label={false} /> “{agent.review.review}”</p>
+          : agent?.thought && <p className="swarm-tile__thought">“{agent.thought}”</p>}
       </footer>
     </article>
   )
@@ -206,12 +265,29 @@ function Report({ report, colors, onZoom, onCopy, copied }) {
           <strong>{report.passed}<span>/{report.total}</span></strong>
           <small>passed · {seconds(report.durationMs)}</small>
         </div>
+        {report.rating && (
+          <div className="swarm-report__score">
+            <Stars rating={report.rating} />
+            <small>average tester rating</small>
+          </div>
+        )}
         <div className="swarm-report__headline">
           <p>{report.headline}</p>
-          <small>{report.target} · {report.brain === 'scripted' ? 'scripted journeys' : report.brain}{report.missionSource === 'planned' ? ' · missions planned by AI from the map' : ''}</small>
+          <small>
+            {report.target} · {report.brain === 'scripted' ? 'scripted journeys' : report.brain}
+            {report.missionSource === 'planned' ? ` · planned from ${report.project?.docs?.length ? report.project.docs.join(', ') : 'the Nexus map'}` : ''}
+            {report.account ? ` · signed in as ${report.account}` : ''}
+          </small>
         </div>
         <button type="button" className="swarm-button swarm-button--quiet" onClick={onCopy}>{copied ? 'Copied' : 'Copy as Markdown'}</button>
       </header>
+
+      {(report.overall || report.app) && (
+        <div className="swarm-report__overall">
+          {report.app && <p className="swarm-report__app">{report.app}</p>}
+          {report.overall && <p>{report.overall}</p>}
+        </div>
+      )}
 
       <ol className="swarm-report__rows">
         {report.agents.map((agent) => (
@@ -236,10 +312,70 @@ function Report({ report, colors, onZoom, onCopy, copied }) {
                 <img src={jpeg(agent.screenshot)} alt={`Last screen of ${agent.persona}`} />
               </button>
             )}
+            {agent.review && (
+              <details className="swarm-row__review" open={agent.status !== 'passed'}>
+                <summary><Stars rating={agent.review.rating} label={false} /> {agent.persona}'s review</summary>
+                <Review review={agent.review} />
+              </details>
+            )}
           </li>
         ))}
       </ol>
     </section>
+  )
+}
+
+function Setup({ project, account, setAccount, focus, setFocus, disabled }) {
+  const [reveal, setReveal] = useState(false)
+  const passwordId = useId()
+  return (
+    <div className="swarm-setup">
+      <div className="swarm-setup__brief">
+        <span className="swarm-setup__label">Brief</span>
+        {project?.docs?.length ? (
+          <p>The testers read <strong>{project.docs.join(', ')}</strong>{project.routes ? ` and ${project.routes} page routes in the code` : ''}, then look around the app before planning.</p>
+        ) : (
+          <p>No README or CLAUDE.md found{project?.name ? ` in ${project.name}` : ''}. The testers plan from the Nexus map and what they see in the app.</p>
+        )}
+      </div>
+      <label className="swarm-field">
+        <span>Test user (optional)</span>
+        <input
+          value={account.username}
+          onChange={(event) => setAccount((current) => ({ ...current, username: event.target.value }))}
+          placeholder="email or username"
+          autoComplete="off"
+          spellCheck={false}
+          disabled={disabled}
+        />
+      </label>
+      <div className="swarm-field">
+        <label htmlFor={passwordId}>Password</label>
+        <span className="swarm-field__row">
+          <input
+            id={passwordId}
+            type={reveal ? 'text' : 'password'}
+            value={account.password}
+            onChange={(event) => setAccount((current) => ({ ...current, password: event.target.value }))}
+            placeholder="never sent to the AI"
+            autoComplete="new-password"
+            disabled={disabled}
+          />
+          <button type="button" className="swarm-field__eye" onClick={() => setReveal((value) => !value)} aria-label={reveal ? 'Hide password' : 'Show password'} title={reveal ? 'Hide' : 'Show'}>
+            {reveal ? 'Hide' : 'Show'}
+          </button>
+        </span>
+      </div>
+      <label className="swarm-field swarm-field--wide">
+        <span>What should they test? (optional)</span>
+        <input
+          value={focus}
+          onChange={(event) => setFocus(event.target.value)}
+          placeholder="e.g. sign-up, checkout, the admin dashboard"
+          disabled={disabled}
+        />
+      </label>
+    </div>
   )
 }
 
@@ -261,8 +397,11 @@ export default function SwarmView({ analysis }) {
   const embedded = hasHost() || params.get('host') === 'intellij'
   const [runner, setRunner] = useState(() => params.get('swarm') || (embedded ? null : DEFAULT_RUNNER))
   const [state, dispatch] = useReducer(reduce, initialState)
-  const [target, setTarget] = useState(() => readPreference('swarmTarget', DEFAULT_TARGET))
+  const [target, setTarget] = useState(() => readPreference('swarmTarget', ''))
   const [headed, setHeaded] = useState(() => readPreference('swarmHeaded', false))
+  // The user name is remembered; the password lives only in memory for this session.
+  const [account, setAccount] = useState(() => ({ username: readPreference('swarmUser', ''), password: '' }))
+  const [focusText, setFocusText] = useState(() => readPreference('swarmFocus', ''))
   const [focus, setFocus] = useState(null)
   const [zoom, setZoom] = useState(null)
   const [notice, setNotice] = useState('')
@@ -276,6 +415,16 @@ export default function SwarmView({ analysis }) {
 
   useEffect(() => writePreference('swarmTarget', target), [target])
   useEffect(() => writePreference('swarmHeaded', headed), [headed])
+  useEffect(() => writePreference('swarmUser', account.username), [account.username])
+  useEffect(() => writePreference('swarmFocus', focusText), [focusText])
+
+  // The URL the project's docs or dev config name, unless the user typed one. The demo shop's
+  // port counts as "not chosen" for any other project, so a real app is never tested against
+  // the demo by accident.
+  const suggested = state.project?.suggestedTarget
+  const isDemoProject = /nexus-demo/i.test(state.project?.name ?? '')
+  const chosen = target.trim() && !(target.trim() === DEFAULT_TARGET && suggested && !isDemoProject)
+  const url = chosen ? target.trim() : (suggested || target.trim() || DEFAULT_TARGET)
 
   // Inside the IDE, ask the plugin for the runner. The bridge may not be installed yet when
   // this mounts, so ask again once the host announces itself.
@@ -322,7 +471,7 @@ export default function SwarmView({ analysis }) {
     return () => source.close()
   }, [runner, paint])
 
-  const live = ['starting', 'planning', 'running', 'reporting'].includes(state.phase)
+  const live = LIVE_PHASES.includes(state.phase)
 
   useEffect(() => {
     if (!live) return undefined
@@ -360,8 +509,15 @@ export default function SwarmView({ analysis }) {
     setFocus(null)
     frames.current.clear()
     images.current.forEach((image) => image.removeAttribute('src'))
-    call('/run', { target: target.trim(), headed, graph: analysis?.status === 'ready' ? analysis : null })
-  }, [analysis, call, headed, target])
+    const username = account.username.trim()
+    call('/run', {
+      target: url,
+      headed,
+      graph: analysis?.status === 'ready' ? analysis : null,
+      credentials: username ? { username, password: account.password } : null,
+      focus: focusText.trim(),
+    })
+  }, [account, analysis, call, focusText, headed, url])
 
   const replay = useCallback(() => {
     setFocus(null)
@@ -411,11 +567,11 @@ export default function SwarmView({ analysis }) {
         <div className="swarm-bar">
           <div className="swarm-bar__title">
             <span className="swarm-bar__eyebrow">Swarm test</span>
-            <strong>5 AI agents test your running app, in parallel</strong>
+            <strong>5 AI testers use your running app like real users, then review it</strong>
           </div>
           <label className="swarm-field">
             <span>App URL</span>
-            <input value={target} onChange={(event) => setTarget(event.target.value)} spellCheck={false} disabled={live} />
+            <input value={url} onChange={(event) => setTarget(event.target.value)} spellCheck={false} disabled={live} />
           </label>
           <label className="swarm-toggle" title="Also open five real Chromium windows, tiled across the screen">
             <input type="checkbox" checked={headed} onChange={(event) => setHeaded(event.target.checked)} disabled={live} />
@@ -429,13 +585,15 @@ export default function SwarmView({ analysis }) {
                 {state.hasReplay && (
                   <button type="button" className="swarm-button swarm-button--quiet" onClick={replay} disabled={offline || submitting}>Replay last run</button>
                 )}
-                <button type="button" className="swarm-button swarm-button--go" onClick={start} disabled={offline || submitting || !target.trim()}>
-                  <span aria-hidden="true">▶</span> Run 5 agents
+                <button type="button" className="swarm-button swarm-button--go" onClick={start} disabled={offline || submitting}>
+                  <span aria-hidden="true">▶</span> Run 5 testers
                 </button>
               </>
             )}
           </div>
         </div>
+
+        <Setup project={state.project} account={account} setAccount={setAccount} focus={focusText} setFocus={setFocusText} disabled={live} />
 
         <div className="swarm-status-line" role="status">
           <span className={`swarm-dot swarm-dot--${offline ? 'off' : live ? 'live' : 'on'}`} aria-hidden="true" />
@@ -447,6 +605,8 @@ export default function SwarmView({ analysis }) {
           {state.brain && !offline && <span className="swarm-chip swarm-chip--brain">{state.brain === 'scripted' ? 'Scripted (no API key)' : state.brain}</span>}
           {analysis?.status === 'ready' && <span className="swarm-chip" title="Failures are traced to code through the Nexus map">Map linked</span>}
         </div>
+
+        {state.app && <p className="swarm-app"><span>The testers' understanding of the app</span>{state.app}</p>}
 
         {notice && <p className="swarm-notice" role="alert">{notice}</p>}
         {state.phase === 'error' && state.message && <p className="swarm-notice" role="alert">{state.message}</p>}

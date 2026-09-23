@@ -66,9 +66,11 @@ export function buildReport({ results, target, graph, brain, startedAt, finished
           }
         : crash ? { method: null, path: null, status: null, missingBackend: false, frontend: crash, backend: null } : null,
       crash: result.verdict.reason === 'crash' ? result.verdict.detail : null,
+      review: result.review ?? null,
       screenshot: result.screenshot,
     }
   })
+  const rated = agents.filter((agent) => agent.review?.rating)
 
   const passed = agents.filter((agent) => agent.status === 'passed').length
   const broken = agents.filter((agent) => agent.status === 'failed')
@@ -82,6 +84,8 @@ export function buildReport({ results, target, graph, brain, startedAt, finished
     passed,
     warnings: agents.filter((agent) => agent.status === 'warning').length,
     failed: broken.length,
+    rating: rated.length ? Math.round((rated.reduce((sum, agent) => sum + agent.review.rating, 0) / rated.length) * 10) / 10 : null,
+    overall: null,
     headline: broken.length === 0
       ? 'Every journey worked.'
       : `${broken.map((agent) => agent.persona).join(', ')} ${broken.length === 1 ? 'hit a problem' : 'hit problems'}.`,
@@ -90,8 +94,10 @@ export function buildReport({ results, target, graph, brain, startedAt, finished
 }
 
 const POLISH_SYSTEM = `You write the summary of an automated test run for a busy developer.
-You get JSON facts. Reply as JSON {"headline":"...","lines":{"<agent id>":"..."}}.
+You get JSON facts, including each tester's own review. Reply as JSON
+{"headline":"...","overall":"...","lines":{"<agent id>":"..."}}.
 headline: at most 12 words, says how many journeys worked and the single most serious problem.
+overall: 2 or 3 sentences, like a QA lead's sign-off: is the app ready for real users, what to fix first.
 each line: at most 12 words, plain English, what the user tried and what went wrong or right.
 Never invent facts, file names or numbers that are not in the input. No emoji.`
 
@@ -107,6 +113,7 @@ export async function polishReport(report, brain) {
     failing_request: agent.cause?.path ? `${agent.cause.method} ${agent.cause.path} -> ${agent.cause.status}` : null,
     backend_route_missing: agent.cause?.missingBackend ?? false,
     crash: agent.crash,
+    tester_review: agent.review ? { rating: agent.review.rating, review: agent.review.review, problems: agent.review.problems.map((problem) => problem.text) } : null,
   }))
   try {
     const reply = await brain.json(POLISH_SYSTEM, JSON.stringify({ passed: report.passed, total: report.total, agents: facts }))
@@ -114,6 +121,7 @@ export async function polishReport(report, brain) {
     return {
       ...report,
       headline: typeof reply?.headline === 'string' && reply.headline.trim() ? reply.headline.trim().slice(0, 120) : report.headline,
+      overall: typeof reply?.overall === 'string' && reply.overall.trim() ? reply.overall.trim().slice(0, 600) : report.overall,
       agents: report.agents.map((agent) => ({
         ...agent,
         line: typeof lines[agent.id] === 'string' && lines[agent.id].trim() ? lines[agent.id].trim().slice(0, 120) : agent.line,
@@ -135,18 +143,40 @@ export function toMarkdown(report) {
     ].filter(Boolean).join(' · ')
     return `| ${MARK[agent.status]} | ${agent.emoji} ${agent.persona} | ${agent.line} | ${where} |`
   })
+  const reviews = report.agents.filter((agent) => agent.review).flatMap((agent) => {
+    const review = agent.review
+    return [
+      `### ${agent.emoji} ${agent.persona} · ${stars(review.rating)}${review.title ? ` · ${review.title}` : ''}`,
+      '',
+      `> ${review.review}`,
+      '',
+      `*Goal:* ${agent.goal}`,
+      ...(review.worked.length ? ['', '**Worked**', ...review.worked.map((item) => `- ${item}`)] : []),
+      ...(review.problems.length ? ['', '**Problems**', ...review.problems.map((problem) => `- **${problem.severity}**: ${problem.text}`)] : []),
+      ...(review.suggestions.length ? ['', '**Suggestions**', ...review.suggestions.map((item) => `- ${item}`)] : []),
+      '',
+    ]
+  })
   return [
-    `# Swarm test: ${report.passed} / ${report.total} passed · ${seconds}s`,
+    `# Swarm test: ${report.passed} / ${report.total} passed · ${seconds}s${report.rating ? ` · ${report.rating} / 5 stars` : ''}`,
     '',
     `**${report.headline}**`,
+    ...(report.overall ? ['', report.overall] : []),
     '',
-    `Target: ${report.target} · Brain: ${report.brain}`,
+    `Target: ${report.target} · Brain: ${report.brain}${report.account ? ` · Signed in as ${report.account}` : ''}${report.project?.docs?.length ? ` · Read ${report.project.docs.join(', ')}` : ''}`,
+    ...(report.app ? ['', `*App under test:* ${report.app}`] : []),
     '',
     '| | Agent | Result | Where |',
     '|---|---|---|---|',
     ...rows,
     '',
+    ...(reviews.length ? ['## What the testers said', '', ...reviews] : []),
   ].join('\n')
+}
+
+export function stars(rating) {
+  const full = Math.max(0, Math.min(5, Math.round(rating ?? 0)))
+  return `${'★'.repeat(full)}${'☆'.repeat(5 - full)}`
 }
 
 export function toText(report) {
@@ -155,6 +185,8 @@ export function toText(report) {
   for (const agent of report.agents) {
     lines.push(`${MARK[agent.status]} ${agent.persona.padEnd(13)} ${agent.line}`)
     if (agent.cause?.frontend) lines.push(`   ${''.padEnd(13)} → ${agent.cause.frontend.file}:${agent.cause.frontend.line}`)
+    if (agent.review) lines.push(`   ${''.padEnd(13)} ${stars(agent.review.rating)} "${agent.review.review}"`)
   }
+  if (report.overall) lines.push('', report.overall)
   return lines.join('\n')
 }

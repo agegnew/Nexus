@@ -43,7 +43,7 @@
 .swarm-bar__title strong { font-size: 0.95rem; font-weight: 650; }
 
 .swarm-field { display: grid; gap: 3px; }
-.swarm-field span { color: var(--text-muted); font-size: 11px; }
+.swarm-field > span:first-child, .swarm-field > label { color: var(--text-muted); font-size: 11px; }
 .swarm-field input {
   width: 220px;
   padding: 6px 8px;
@@ -503,6 +503,123 @@
   cursor: zoom-out;
 }
 .swarm-zoom img { max-width: 100%; max-height: 100%; border-radius: 10px; box-shadow: 0 20px 60px rgb(0 0 0 / 0.5); }
+
+/* Test setup: the brief, the test account and the focus ------------------------------------- */
+
+.swarm-setup {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-md) var(--space-lg);
+  padding: var(--space-md) var(--space-lg);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: color-mix(in oklch, var(--surface-raised) 70%, transparent);
+}
+
+.swarm-setup__brief { flex: 1 1 260px; display: grid; gap: 3px; min-width: 0; }
+.swarm-setup__label { color: var(--text-muted); font-size: 11px; }
+.swarm-setup__brief p { margin: 0; color: var(--text-secondary); font-size: 12px; line-height: 1.45; }
+.swarm-setup__brief strong { color: var(--text-primary); font-family: var(--font-code); font-size: 11.5px; font-weight: 600; }
+
+.swarm-setup .swarm-field input { width: 180px; }
+.swarm-field--wide { flex: 1 1 220px; }
+.swarm-setup .swarm-field--wide input { box-sizing: border-box; width: 100%; font-family: var(--font-ui); }
+.swarm-field input::placeholder { color: var(--text-muted); opacity: 0.8; }
+.swarm-field input:disabled { opacity: 0.6; }
+
+.swarm-field__row { display: flex; }
+.swarm-setup .swarm-field__row input { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.swarm-field__eye {
+  padding: 0 8px;
+  border: 1px solid var(--border-subtle);
+  border-left: 0;
+  border-radius: 0 6px 6px 0;
+  color: var(--text-muted);
+  background: var(--surface-node);
+  font-size: 11px;
+  cursor: pointer;
+}
+.swarm-field__eye:hover { color: var(--text-primary); }
+.swarm-field__eye:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+
+.swarm-app {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 8px 12px;
+  border-left: 3px solid var(--project);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  background: var(--surface-raised);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+.swarm-app span { color: var(--text-muted); font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; }
+
+/* Ratings and reviews ----------------------------------------------------------------------- */
+
+.swarm-stars { display: inline-flex; align-items: baseline; gap: 6px; color: var(--project); letter-spacing: 1px; font-style: normal; }
+.swarm-stars i { color: var(--border-subtle); font-style: normal; }
+.swarm-stars b { color: var(--text-primary); font-size: 1.4rem; font-weight: 750; letter-spacing: 0; }
+.swarm-report__score .swarm-stars { font-size: 1.1rem; }
+
+.swarm-tile__thought--review { font-style: normal; }
+.swarm-tile__thought--review .swarm-stars { margin-right: 4px; font-size: 11px; }
+
+.swarm-report__overall {
+  display: grid;
+  gap: 6px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: var(--surface-base);
+  font-size: 13px;
+  line-height: 1.55;
+}
+.swarm-report__overall p { margin: 0; }
+.swarm-report__app { color: var(--text-muted); font-size: 12px; }
+
+.swarm-row__review { grid-column: 1 / -1; }
+.swarm-row__review summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  list-style: none;
+}
+.swarm-row__review summary::-webkit-details-marker { display: none; }
+.swarm-row__review summary::before { content: '▸'; color: var(--text-muted); transition: transform 150ms ease; }
+.swarm-row__review[open] summary::before { transform: rotate(90deg); }
+.swarm-row__review summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+.swarm-review { display: grid; gap: 10px; padding: 10px 0 4px 18px; }
+.swarm-review__quote { margin: 0; color: var(--text-primary); font-size: 13px; font-style: italic; line-height: 1.55; }
+.swarm-review__quote strong { font-style: normal; }
+.swarm-review__lists { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px 18px; }
+.swarm-review h4 {
+  margin: 0 0 4px;
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.swarm-review ul { display: grid; gap: 4px; margin: 0; padding-left: 16px; color: var(--text-secondary); font-size: 12px; line-height: 1.45; }
+
+.swarm-severity {
+  display: inline-block;
+  padding: 0 5px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  vertical-align: 1px;
+}
+.swarm-severity--blocker { color: #fff; background: oklch(60% 0.19 28); }
+.swarm-severity--major { color: var(--unmatched); background: oklch(69% 0.15 30 / 0.16); }
+.swarm-severity--minor { color: var(--project); background: oklch(81% 0.12 95 / 0.14); }
 
 /* A narrow tool window: two across, the last tile full width. */
 @container (max-width: 760px) {

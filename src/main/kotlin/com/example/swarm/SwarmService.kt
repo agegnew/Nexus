@@ -103,6 +103,8 @@ class SwarmService(private val project: Project) : Disposable {
         val settings = ActivitySettings.getInstance()
         settings.apiKey.takeIf { it.isNotBlank() }?.let { command.withEnvironment("OPENAI_API_KEY", it) }
         command.withEnvironment("NEXUS_SWARM_MODEL", settings.model)
+        // The testers read this project's README, CLAUDE.md and docs before they plan.
+        project.basePath?.let { command.withEnvironment("NEXUS_SWARM_PROJECT", it) }
 
         logger.info("Nexus Swarm: starting ${command.commandLineString} in ${dir.path}")
         val started = command.createProcess()

@@ -72,29 +72,59 @@ export const DEMO_MISSIONS = [
   },
 ]
 
-const PLANNER_SYSTEM = `You plan exploratory end-to-end tests for a web app. You will get a map of the
-app's API calls (from static analysis) and the accessibility tree of its home page.
-Invent exactly 5 test agents, each a different kind of real user with one concrete goal that can be
-reached in under 10 clicks from the home page. Cover the most important features. Prefer features
-whose API calls are marked NO BACKEND MATCH, because those are likely broken. Exactly one agent must
-be a "Chaos Monkey" that tries to break a form with empty, huge or odd input.
-Reply as JSON: {"missions":[{"id":"short-kebab-id","persona":"one or two words","emoji":"one emoji",
-"goal":"what the user wants, one sentence","expect":"a short regex of on-screen text that proves success, or null"}]}`
+const PLANNER_SYSTEM = `You are the lead of a team of 5 manual QA testers about to test a real web app.
+You get the project's own documentation (README, CLAUDE.md and similar), the pages its code declares,
+a map of its API calls from static analysis, the pages a quick crawl found, whether a test account
+exists, and what the developer wants tested.
+First understand what the app is for and who uses it. Then invent exactly 5 testers, each a different
+kind of real user of THIS app, each with one concrete goal a real user would have, reachable in under
+15 actions from the home page. Together they must cover the app's most important features.
+Rules:
+- If the app has a login and a test account exists, one tester checks signing in itself (then
+  something only a signed-in user can see), and testers whose goal needs an account sign in first.
+- If the app has sign-up but no test account, one tester signs up as a new user.
+- Prefer features whose API calls are marked NO BACKEND MATCH: they are likely broken.
+- Exactly one tester is a "Chaos Monkey" who tries to break a form: empty fields, a huge value,
+  odd characters, double submits.
+- Follow the developer's focus when one is given.
+- Only name screens, buttons and data that the documentation or the crawl show exist.
+Reply as JSON: {"app":"one sentence: what the app is and who it is for",
+"missions":[{"id":"short-kebab-id","persona":"one or two words","emoji":"one emoji",
+"goal":"what this user wants to do, one or two sentences, concrete",
+"login":true|false,
+"expect":"a short regex of on-screen text that proves success, or null when unsure"}]}`
 
-/** Asks the model for five missions tailored to this app. Returns null when it cannot. */
-export async function planMissions(brain, { graphText, homeSnapshot }) {
+/**
+ * Asks the model for five missions tailored to this app. Returns null when it cannot.
+ * [context] is the project brief, [pages] what the scout saw, [account] the test account.
+ */
+export async function planMissions(brain, { graphText, homeSnapshot, context = null, pages = [], account = null, focus = '' }) {
   if (!brain.canThink) return null
+  const crawl = pages.length
+    ? pages.map((page) => `## ${page.path} (${page.title || 'untitled'})${page.hasPassword ? ' [has a password field]' : ''}\n${page.snapshot}`).join('\n\n')
+    : `## / (home)\n${homeSnapshot.slice(0, 6000)}`
+  const brief = [
+    context?.text ? `PROJECT DOCUMENTATION\n${context.text}` : 'PROJECT DOCUMENTATION\n(none found)',
+    `API MAP\n${graphText}`,
+    `CRAWLED PAGES\n${crawl.slice(0, 14000)}`,
+    `TEST ACCOUNT\n${account?.hasLogin ? `yes, username "${account.username}"` : 'none'}`,
+    `DEVELOPER FOCUS\n${focus?.trim() || '(none, cover the main features)'}`,
+  ].join('\n\n')
   try {
-    const reply = await brain.json(PLANNER_SYSTEM, `API map:\n${graphText}\n\nHome page:\n${homeSnapshot.slice(0, 6000)}`)
+    const reply = await brain.json(PLANNER_SYSTEM, brief)
     const missions = (reply?.missions ?? []).slice(0, 5).map((mission, index) => ({
       id: String(mission.id || `agent-${index + 1}`).replace(/[^a-z0-9-]/gi, '-').toLowerCase(),
       persona: String(mission.persona || `Agent ${index + 1}`).slice(0, 24),
       emoji: String(mission.emoji || '🤖').slice(0, 4),
-      goal: String(mission.goal || 'Explore the app.').slice(0, 200),
+      goal: String(mission.goal || 'Explore the app.').slice(0, 280),
+      login: Boolean(mission.login),
       expect: validRegex(mission.expect) ? mission.expect : null,
+      // Signing in costs a handful of steps before the real goal even starts.
+      maxSteps: mission.login ? 20 : 15,
       script: null,
     }))
-    return missions.length === 5 ? dedupeIds(missions) : null
+    if (missions.length !== 5) return null
+    return { missions: dedupeIds(missions), app: typeof reply.app === 'string' ? reply.app.slice(0, 240) : '' }
   } catch {
     return null
   }

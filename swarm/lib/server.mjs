@@ -1,10 +1,12 @@
 // The swarm's local control server. The Nexus tab talks to it directly over loopback:
 //   GET  /events   server-sent events: every live update, plus a snapshot on connect
-//   POST /run      { target, graph?, headed?, plan? } starts a run
+//   POST /run      { target, graph?, headed?, plan?, credentials?: {username, password}, focus?, projectPath? }
+//                  starts a run. The password is used by the browsers only: it is never broadcast,
+//                  recorded, or sent to the model.
 //   POST /stop     stops the current run
 //   POST /replay   plays the last recorded run again, frames and all (the stage safety net)
 //   GET  /report   the last report as JSON, /report.md as Markdown
-//   GET  /health   liveness, and whether a model is available
+//   GET  /health   liveness, whether a model is available, and what the runner read about the project
 
 import { createServer } from 'node:http'
 import { createWriteStream, existsSync } from 'node:fs'
@@ -12,12 +14,15 @@ import { mkdir, readFile, rename } from 'node:fs/promises'
 import { join } from 'node:path'
 import { runSwarm } from './swarm.mjs'
 import { toMarkdown } from './report.mjs'
+import { readProjectContext, contextSummary } from './context.mjs'
 
 const RECORD_FPS = 3
 const MAX_BODY = 8 * 1024 * 1024
 
-export function createSwarmServer({ brain, outDir, pace, maxSteps }) {
+export function createSwarmServer({ brain, outDir, pace, maxSteps, projectPath = null }) {
   const clients = new Set()
+  // What the Swarm tab shows before a run: which docs were found and the URL the app likely runs on.
+  const project = readProjectContext(projectPath).then(contextSummary, () => null)
   let running = null
   let replaying = null
   let state = freshState()
@@ -28,7 +33,7 @@ export function createSwarmServer({ brain, outDir, pace, maxSteps }) {
   let busy = false
 
   function freshState() {
-    return { phase: 'idle', message: '', target: null, missions: [], agents: {}, report: null, replay: false }
+    return { phase: 'idle', message: '', target: null, app: '', missions: [], agents: {}, report: null, replay: false }
   }
 
   /** Keeps the snapshot a late-joining tab receives, so reopening the tool window resumes the view. */
@@ -41,11 +46,12 @@ export function createSwarmServer({ brain, outDir, pace, maxSteps }) {
         break
       case 'missions':
         state.missions = event.missions
-        state.agents = Object.fromEntries(event.missions.map((mission) => [mission.id, { status: 'queued', thought: '', action: '', step: 0, frame: null, calls: 0 }]))
+        state.app = event.app ?? ''
+        state.agents = Object.fromEntries(event.missions.map((mission) => [mission.id, { status: 'queued', thought: '', action: '', step: 0, frame: null, calls: 0, review: null }]))
         break
       case 'agent': {
         const agent = state.agents[event.id]
-        if (agent) Object.assign(agent, { status: event.status, thought: event.thought, action: event.action, step: event.step })
+        if (agent) Object.assign(agent, { status: event.status, thought: event.thought, action: event.action, step: event.step }, event.review ? { review: event.review } : {})
         break
       }
       case 'frame':
@@ -81,7 +87,7 @@ export function createSwarmServer({ brain, outDir, pace, maxSteps }) {
     }
   }
 
-  async function startRun({ target, graph, headed, plan }) {
+  async function startRun({ target, graph, headed, plan, credentials, focus, projectPath: runProject }) {
     const controller = new AbortController()
     const startedAt = Date.now()
     state = freshState()
@@ -93,7 +99,10 @@ export function createSwarmServer({ brain, outDir, pace, maxSteps }) {
     const emit = liveEmit(startedAt)
     running = {
       controller,
-      done: runSwarm({ target, graph, headed, plan, brain, emit, outDir, pace, maxSteps, signal: controller.signal })
+      done: runSwarm({
+        target, graph, headed, plan, brain, emit, outDir, pace, maxSteps, signal: controller.signal,
+        projectPath: runProject || projectPath, credentials, focus,
+      })
         .then((report) => { lastReport = report; finished = true })
         .catch((error) => broadcast({ type: 'run', phase: 'error', message: error.message }))
         .finally(async () => {
@@ -163,7 +172,7 @@ export function createSwarmServer({ brain, outDir, pace, maxSteps }) {
 
     try {
       if (request.method === 'GET' && pathname === '/health') {
-        return send(response, 200, { ok: true, brain: brain.model, canThink: brain.canThink, running: Boolean(running), replaying: Boolean(replaying) })
+        return send(response, 200, { ok: true, brain: brain.model, canThink: brain.canThink, running: Boolean(running), replaying: Boolean(replaying), project: await project })
       }
 
       if (request.method === 'GET' && pathname === '/events') {
@@ -173,7 +182,7 @@ export function createSwarmServer({ brain, outDir, pace, maxSteps }) {
           Connection: 'keep-alive',
           'Access-Control-Allow-Origin': '*',
         })
-        response.write(`data: ${JSON.stringify({ type: 'snapshot', brain: brain.model, canThink: brain.canThink, hasReplay: existsSync(join(outDir, 'last-run.jsonl')), state })}\n\n`)
+        response.write(`data: ${JSON.stringify({ type: 'snapshot', brain: brain.model, canThink: brain.canThink, hasReplay: existsSync(join(outDir, 'last-run.jsonl')), project: await project, state })}\n\n`)
         clients.add(response)
         const ping = setInterval(() => response.write(': ping\n\n'), 15_000)
         request.on('close', () => { clearInterval(ping); clients.delete(response) })
@@ -190,7 +199,18 @@ export function createSwarmServer({ brain, outDir, pace, maxSteps }) {
             busy = false
             return send(response, 400, { error: 'target must be an http(s) URL' })
           }
-          await startRun({ target, graph: body.graph ?? null, headed: Boolean(body.headed), plan: body.plan ?? 'auto' })
+          const credentials = body.credentials && typeof body.credentials === 'object'
+            ? { username: String(body.credentials.username ?? '').slice(0, 200), password: String(body.credentials.password ?? '').slice(0, 200) }
+            : null
+          await startRun({
+            target,
+            graph: body.graph ?? null,
+            headed: Boolean(body.headed),
+            plan: body.plan ?? 'auto',
+            credentials,
+            focus: String(body.focus ?? '').slice(0, 500),
+            projectPath: typeof body.projectPath === 'string' ? body.projectPath : null,
+          })
         } catch (error) {
           if (!running) busy = false
           throw error

@@ -4,6 +4,8 @@
 import { AGENT_SYSTEM } from './brain.mjs'
 import { UNIVERSAL_FORBID } from './missions.mjs'
 import { pathOf } from './codemap.mjs'
+import { createAccount } from './account.mjs'
+import { writeReview } from './review.mjs'
 
 const MAX_SNAPSHOT = 6000
 
@@ -118,8 +120,10 @@ async function locate(page, action) {
   for (const exact of [true, false]) {
     for (const role of roles) candidates.push(page.getByRole(role, { name, exact }))
   }
-  if (action.type !== 'click') candidates.push(page.getByLabel(name))
+  if (action.type !== 'click') candidates.push(page.getByLabel(name), page.getByPlaceholder(name))
   else candidates.push(page.getByText(name, { exact: false }))
+  // Password inputs have no ARIA role, so a model that asks for "Password" finds them here.
+  if (action.type === 'fill' && /pass/i.test(name)) candidates.push(page.locator('input[type=password]'))
 
   for (const candidate of candidates) {
     if ((await candidate.count().catch(() => 0)) > 0) return candidate.first()
@@ -142,13 +146,27 @@ async function point(page, element, cursor) {
   await page.waitForTimeout(260)
 }
 
-async function act(page, action, cursor) {
+async function act(page, action, cursor, account) {
   switch (action.type) {
     case 'wait':
       await page.waitForTimeout(1400)
       return
-    case 'goto':
-      await page.goto(new URL(action.value || '/', page.url()).toString(), { waitUntil: 'domcontentloaded' })
+    case 'goto': {
+      // Only within the app under test: a model must not wander off to another site.
+      const next = new URL(action.value || '/', page.url())
+      if (next.origin !== new URL(page.url()).origin) throw new Error(`Refused to leave the app for ${next.origin}`)
+      await page.goto(next.toString(), { waitUntil: 'domcontentloaded' })
+      return
+    }
+    case 'back':
+      await page.goBack({ waitUntil: 'domcontentloaded', timeout: 8000 })
+      return
+    case 'scroll':
+      await page.mouse.wheel(0, 600)
+      await page.waitForTimeout(300)
+      return
+    case 'press':
+      await page.keyboard.press(String(action.value || 'Enter'))
       return
     case 'click': {
       const element = await locate(page, action)
@@ -161,13 +179,14 @@ async function act(page, action, cursor) {
       await point(page, element, cursor)
       await element.click({ timeout: 4000 })
       await element.fill('')
-      if (action.value) await element.pressSequentially(String(action.value), { delay: 65 })
+      const value = account.resolve(action.value)
+      if (value) await element.pressSequentially(value, { delay: value.length > 60 ? 5 : 65 })
       return
     }
     case 'select': {
       const element = await locate(page, action)
       await point(page, element, cursor)
-      const wanted = String(action.value ?? '').toLowerCase()
+      const wanted = account.resolve(action.value).toLowerCase()
       const options = await element.locator('option').evaluateAll((items) =>
         items.map((item) => ({ value: item.value, label: item.textContent ?? '' })))
       const match = options.find((option) => option.value.toLowerCase() === wanted)
@@ -187,17 +206,26 @@ async function act(page, action, cursor) {
   }
 }
 
-function describe(action) {
+function describe(action, account) {
   if (!action) return ''
   const name = action.name ? ` "${action.name}"` : ''
   switch (action.type) {
-    case 'fill': return action.value ? `type "${action.value}" into${name}` : `clear${name}`
+    case 'fill': return action.value ? account.mask(`type "${short(action.value)}" into${name}`) : `clear${name}`
+    case 'press': return `press ${action.value || 'Enter'}`
+    case 'goto': return `go to ${action.value || '/'}`
+    case 'back': return 'go back'
+    case 'scroll': return 'scroll down'
     case 'select': return `choose "${action.value}" in${name}`
     case 'check': return `${String(action.value) === 'false' ? 'untick' : 'tick'}${name}`
     case 'wait': return 'wait'
     case 'done': return action.status ? `done: ${action.status}` : 'check the result'
     default: return `${action.type}${name}`
   }
+}
+
+function short(text) {
+  const value = String(text ?? '')
+  return value.length > 40 ? `${value.slice(0, 37)}… (${value.length} chars)` : value
 }
 
 /** The first line of the page that contains a word no healthy screen shows. */
@@ -252,10 +280,14 @@ function historyText(history) {
  * Runs one mission to a verdict. [emit] receives progress events for the live tiles; the
  * return value is everything the report needs.
  */
-export async function runAgent({ mission, page, target, brain, emit, maxSteps = 12, pace = 900, isStopped = () => false }) {
+export async function runAgent({ mission, page, target, brain, emit, maxSteps: defaultMaxSteps = 12, pace = 900, isStopped = () => false, account = createAccount(), app = '' }) {
   const startedAt = Date.now()
+  const maxSteps = mission.maxSteps ?? defaultMaxSteps
   const evidence = { apiErrors: [], consoleErrors: [], pageErrors: [], requests: 0 }
   const history = []
+  // Everything the agent did, with its reasoning, and what it remarked on: the review is written from these.
+  const journal = []
+  const notes = []
   const cursor = { x: 40, y: 40 }
   let mode = brain.canThink ? 'model' : 'script'
   let scriptIndex = 0
@@ -285,7 +317,7 @@ export async function runAgent({ mission, page, target, brain, emit, maxSteps = 
   })
 
   const say = (status, thought, action) => emit({
-    type: 'agent', id: mission.id, status, step: steps, thought, action: describe(action),
+    type: 'agent', id: mission.id, status, step: steps, thought: account.mask(thought), action: describe(action, account),
   })
 
   say('running', 'Opening the app.')
@@ -307,11 +339,13 @@ export async function runAgent({ mission, page, target, brain, emit, maxSteps = 
         decision = await brain.json(AGENT_SYSTEM, [
           `Persona: ${mission.persona}`,
           `Goal: ${mission.goal}`,
+          app ? `The app: ${app}` : '',
+          mission.login ? `This goal needs you signed in. ${account.brief()}` : account.brief(),
           `Step ${steps + 1} of ${maxSteps}. URL: ${seen.url}`,
           `What you did so far:\n${historyText(history)}`,
           `Failed network requests so far:\n${errors}`,
-          `Accessibility tree:\n${seen.snapshot}`,
-        ].join('\n\n'))
+          `Accessibility tree:\n${account.mask(seen.snapshot)}`,
+        ].filter(Boolean).join('\n\n'))
       } catch (error) {
         if (!mission.script) {
           claimed = { status: 'failed', summary: 'The model stopped answering.' }
@@ -332,6 +366,7 @@ export async function runAgent({ mission, page, target, brain, emit, maxSteps = 
     }
 
     const action = decision?.action ?? { type: 'wait' }
+    if (typeof decision?.note === 'string' && decision.note.trim() && notes.length < 12) notes.push(account.mask(decision.note.trim().slice(0, 200)))
 
     if (action.type === 'done') {
       if (mode === 'model') claimed = { status: action.status === 'passed' ? 'passed' : 'failed', summary: action.summary ?? decision.thought }
@@ -341,12 +376,14 @@ export async function runAgent({ mission, page, target, brain, emit, maxSteps = 
 
     steps += 1
     say('running', decision.thought || '', action)
+    const entry = { what: describe(action, account), thought: account.mask(decision.thought || '') }
     try {
-      await act(page, action, cursor)
-      history.push({ what: describe(action) })
+      await act(page, action, cursor, account)
     } catch (error) {
-      history.push({ what: describe(action), error: error.message.split('\n')[0].slice(0, 160) })
+      entry.error = account.mask(error.message.split('\n')[0].slice(0, 160))
     }
+    history.push(entry)
+    journal.push(entry)
     await page.waitForTimeout(pace)
   }
 
@@ -355,7 +392,12 @@ export async function runAgent({ mission, page, target, brain, emit, maxSteps = 
   const verdict = judge({ mission, text: final.text, evidence, claimed, steps, maxSteps })
   const screenshot = await page.screenshot({ type: 'jpeg', quality: 70 }).catch(() => null)
 
-  emit({ type: 'agent', id: mission.id, status: verdict.status, step: steps, thought: verdictThought(verdict), action: '' })
+  // The verdict is already final; the tile says what the agent is doing while the model writes.
+  if (mode === 'model') say('running', 'Writing my review.')
+  const review = mode === 'model'
+    ? await writeReview(brain, { mission, app, journal, notes, verdict, evidence, finalText: account.mask(final.text), mask: account.mask })
+    : null
+  emit({ type: 'agent', id: mission.id, status: verdict.status, step: steps, thought: account.mask(verdictThought(verdict)), action: '', review })
 
   return {
     mission,
@@ -365,6 +407,9 @@ export async function runAgent({ mission, page, target, brain, emit, maxSteps = 
     durationMs: Date.now() - startedAt,
     mode,
     claimed,
+    review,
+    notes,
+    journal,
     finalUrl: final.url,
     screenshot: screenshot ? screenshot.toString('base64') : null,
   }
